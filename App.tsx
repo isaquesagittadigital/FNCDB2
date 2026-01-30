@@ -24,18 +24,39 @@ const App: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('consultant');
 
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashStep(1), 1200);
-    const t2 = setTimeout(() => setView(AppView.LOGIN), 2800);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+    const restoreSession = () => {
+      try {
+        const sessionStr = localStorage.getItem('session');
+        const profileStr = localStorage.getItem('profile');
+
+        if (sessionStr && profileStr) {
+          const session = JSON.parse(sessionStr);
+          const profile = JSON.parse(profileStr);
+
+          // Simple check if session is expired (optional, Supabase client handles this usually, but good for immediate UI feedback)
+          // For now, assume if it exists, we try to use it.
+
+          if (profile && profile.tipo_user) {
+            handleLoginSuccess(profile.tipo_user);
+            return; // Skip splash animation logic if session exists
+          }
+        }
+      } catch (e) {
+        console.error("Failed to restore session", e);
+        localStorage.removeItem('session');
+        localStorage.removeItem('profile');
+      }
+
+      // If no session, proceed with Splash -> Login
+      const t1 = setTimeout(() => setSplashStep(1), 1200);
+      const t2 = setTimeout(() => setView(AppView.LOGIN), 2800);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    };
+
+    restoreSession();
   }, []);
 
-  // const handleLoginSuccess = () => setView(AppView.ENVIRONMENT_SELECTION); // Old flow
-
   const handleLoginSuccess = (role: string) => {
-    // Map backend roles to frontend roles
-    // Backend: 'Admin', 'Consultor', 'Cliente'
-    // Frontend: 'admin', 'consultant', 'client'
-
     let mappedRole: UserRole = 'consultant'; // default
 
     if (role === 'Admin') mappedRole = 'admin';
@@ -50,7 +71,12 @@ const App: React.FC = () => {
     setSelectedRole(role);
     setView(AppView.DASHBOARD);
   };
-  const handleLogout = () => setView(AppView.LOGIN);
+
+  const handleLogout = () => {
+    localStorage.removeItem('session');
+    localStorage.removeItem('profile');
+    setView(AppView.LOGIN);
+  };
 
   const renderDashboard = () => {
     switch (selectedRole) {

@@ -16,8 +16,12 @@ server.register(cors, {
 });
 
 // Routes
+// Routes
 import { authRoutes } from './routes/auth.routes';
+import { adminRoutes } from './routes/admin.routes';
+
 server.register(authRoutes, { prefix: '/api' });
+server.register(adminRoutes, { prefix: '/api/admin' });
 
 // Routes
 server.get('/health', async (_request, _reply) => {

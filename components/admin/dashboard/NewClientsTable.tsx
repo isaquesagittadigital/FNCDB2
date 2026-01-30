@@ -3,17 +3,42 @@ import React from 'react';
 import { UserPlus, MoreHorizontal } from 'lucide-react';
 
 const NewClientsTable: React.FC = () => {
-    // Mock data based on image
-    const clients = [
-        { id: '01', name: 'Cliente 01', consultant: 'Carla Gandolfo Educação Financeira LTDA', doc: '000.000.000-00', status: 'Não apto', type: 'Física', isNew: true },
-        { id: '02', name: 'Cliente 02', consultant: 'Carla Gandolfo Educação Financeira LTDA', doc: '000.000.000-00', status: 'Apto', type: 'Física', isNew: true },
-        { id: '03', name: 'Cliente 02', consultant: 'Carla Gandolfo Educação Financeira LTDA', doc: '000.000.000-00', status: 'Apto', type: 'Física', isNew: true },
-        { id: '04', name: 'Cliente 02', consultant: 'Carla Gandolfo Educação Financeira LTDA', doc: '000.000.000-00', status: 'Apto', type: 'Física', isNew: true },
-        { id: '05', name: 'Cliente 02', consultant: 'Carla Gandolfo Educação Financeira LTDA', doc: '000.000.000-00', status: 'Apto', type: 'Física', isNew: true },
-        { id: '06', name: 'Cliente 02', consultant: 'Carla Gandolfo Educação Financeira LTDA', doc: '000.000.000-00', status: 'Apto', type: 'Física', isNew: true },
-        { id: '07', name: 'Cliente 02', consultant: 'Carla Gandolfo Educação Financeira LTDA', doc: '000.000.000-00', status: 'Apto', type: 'Física', isNew: true },
+    const [clients, setClients] = React.useState<any[]>([]);
+    const [totalClients, setTotalClients] = React.useState(0);
+    const [loading, setLoading] = React.useState(true);
 
-    ];
+    React.useEffect(() => {
+        const fetchClients = async () => {
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients/recent`);
+                if (response.ok) {
+                    const { data, total } = await response.json();
+
+                    const formattedClients = data.map((client: any) => ({
+                        id: client.id,
+                        name: client.nome_fantasia || client.razao_social || 'Sem Nome',
+                        consultant: client.meu_consultor?.[0]?.consultor?.nome_fantasia || client.meu_consultor?.[0]?.consultor?.razao_social || 'Sem Consultor',
+                        doc: client.cnpj || client.cpf || '---',
+                        status: client.status_cliente || 'Pendente',
+                        type: client.tipo_cliente === 'Pessoa Jurídica' ? 'Jurídica' : 'Física',
+                        isNew: true
+                    }));
+                    setClients(formattedClients);
+                    setTotalClients(total || 0);
+                }
+            } catch (error) {
+                console.error('Failed to fetch clients', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchClients();
+    }, []);
+
+    if (loading) {
+        return <div className="p-6 text-center text-slate-500">Carregando clientes...</div>;
+    }
 
     return (
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm mt-6">
@@ -63,21 +88,23 @@ const NewClientsTable: React.FC = () => {
                 </table>
             </div>
 
-            <div className="flex items-center justify-between mt-4">
-                <button className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-400 hover:bg-slate-50 disabled:opacity-50" disabled>
-                    ← Anterior
-                </button>
-                <div className="flex gap-2 text-sm text-slate-600">
-                    <span className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded font-medium text-[#002B49]">1</span>
-                    <span className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded cursor-pointer">2</span>
-                    <span className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded cursor-pointer">3</span>
-                    <span className="w-8 h-8 flex items-center justify-center">...</span>
-                    <span className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded cursor-pointer">10</span>
+            {totalClients > 10 && (
+                <div className="flex items-center justify-between mt-4">
+                    <button className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-400 hover:bg-slate-50 disabled:opacity-50" disabled>
+                        ← Anterior
+                    </button>
+                    <div className="flex gap-2 text-sm text-slate-600">
+                        <span className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded font-medium text-[#002B49]">1</span>
+                        <span className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded cursor-pointer">2</span>
+                        <span className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded cursor-pointer">3</span>
+                        <span className="w-8 h-8 flex items-center justify-center">...</span>
+                        <span className="w-8 h-8 flex items-center justify-center hover:bg-slate-50 rounded cursor-pointer">10</span>
+                    </div>
+                    <button className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-[#002B49] font-medium hover:bg-slate-50">
+                        Próximo →
+                    </button>
                 </div>
-                <button className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-[#002B49] font-medium hover:bg-slate-50">
-                    Próximo →
-                </button>
-            </div>
+            )}
         </div>
     );
 };
