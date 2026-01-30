@@ -1,20 +1,68 @@
+# FNCD Capital - Dashboard Administrativo e Autenticação
+
 <div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img src="media/logo.png" alt="FNCD Capital Branding" width="400">
+  <p><i>Inovação em Gestão de Ativos e Capital</i></p>
 </div>
 
-# Run and deploy your AI Studio app
+---
 
-This contains everything you need to run your app locally.
+## 📝 Descrição do Projeto
 
-View your app in AI Studio: https://ai.studio/apps/drive/1P8LWSigX3NIZNhc-yfF02iuhMWHb3l2o
+O **FNCD Capital** é uma plataforma financeira de alta performance desenvolvida para gerenciar ativos, consultores e clientes de forma centralizada e segura. O sistema oferece uma interface premium, focada na experiência do usuário e na clareza dos dados.
 
-## Run Locally
+### Principais Diferenciais:
+*   **Design Premium**: Interface moderna com animações fluidas e identidade visual consistente.
+*   **Dashboard Executivo**: Monitoramento de indicadores chave (KPIs) como total aportado, número de consultores e crescimento de clientes.
+*   **Visualização de Dados**: Gráficos de evolução mensal para acompanhamento de metas e performance.
+*   **Gestão de Contratos**: Tabela detalhada de contratos a vencer, com status, rentabilidade e períodos de aporte.
+*   **Segurança e Branding**: Fluxo de autenticação completo (Login, Esqueci Senha, Reset) com marca d'água e animações de Splash Screen personalizadas.
 
-**Prerequisites:**  Node.js
+---
 
+## 🚀 Funcionalidades Implementadas
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+### 1. Dashboard Administrativo
+*   **Cards de KPI**: Visualização instantânea de métricas financeiras.
+*   **Gráfico de Evolução**: Componente dinâmico para análise de crescimento de consultores e clientes.
+*   **Grid de Contratos**: Interface intuitiva para gerenciamento de datas e valores de aporte.
+*   **Novo Cadastro de Clientes**: Monitoramento proativo de novos entrantes no sistema.
+
+### 2. Fluxo de Autenticação
+*   **SplashScreen Animada**: Transição de marca refinada na abertura do sistema.
+*   **Telas de Recuperação**: Fluxo robusto para recuperação de conta via e-mail.
+*   **UI Estilizada**: Uso estratégico de marcas d'água para fortalecer a presença da marca nas páginas de acesso.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+*   **Core**: [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+*   **Animações**: [Framer Motion](https://www.framer.com/motion/)
+*   **Ícones**: [Lucide React](https://lucide.dev/)
+*   **Containerização**: [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/)
+
+---
+
+## ⚙️ Como Executar
+
+### Pré-requisitos
+*   Docker e Docker Compose instalados.
+
+### Passos
+1.  Clone o repositório:
+    ```bash
+    git clone https://github.com/sagitta-digital/fncd-capital.git
+    ```
+2.  Suba os containers:
+    ```bash
+    docker-compose up -d --build
+    ```
+3.  Acesse a aplicação:
+    `http://localhost:8080`
+
+---
+
+<div align="center">
+  <p>Desenvolvido por <strong>FNCD Capital Team</strong></p>
+</div>
