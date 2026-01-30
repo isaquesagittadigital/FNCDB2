@@ -6,7 +6,7 @@ import { LogoIcon, LogoWatermark } from '../shared/ui/Logo';
 
 interface LoginFormProps {
   onForgotPassword: () => void;
-  onLoginSuccess: () => void;
+  onLoginSuccess: (role: string) => void;
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess }) => {
@@ -14,11 +14,40 @@ const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate API call
-    console.log('Login attempt:', { email, password });
-    onLoginSuccess();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao realizar login');
+      }
+
+      console.log('Login successful:', data);
+      localStorage.setItem('session', JSON.stringify(data.session));
+      localStorage.setItem('profile', JSON.stringify(data.profile)); // Save profile for persistence
+
+      // Pass the role to the callback
+      onLoginSuccess(data.profile.tipo_user);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -58,6 +87,18 @@ const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess 
             Bem-vindo(a) novamente. Informe os seus dados abaixo para acessar a plataforma
           </motion.p>
         </div>
+
+
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-medium text-center w-full max-w-md"
+          >
+            {error}
+          </motion.div>
+        )}
 
         {/* Form */}
         <motion.form
@@ -121,11 +162,14 @@ const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess 
 
           <button
             type="submit"
-            className="w-full bg-[#00A3B1] hover:bg-[#008c99] text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-[#00A3B1]/20 active:scale-[0.98]"
+            disabled={loading}
+            className={`w-full bg-[#00A3B1] hover:bg-[#008c99] text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-[#00A3B1]/20 active:scale-[0.98] ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
-            Entrar na conta
+            {loading ? 'Carregando...' : 'Entrar na conta'}
           </button>
         </motion.form>
+
+
 
         <motion.p
           initial={{ opacity: 0 }}
@@ -134,8 +178,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess 
         >
           &copy; {new Date().getFullYear()} FNCD Capital. Todos os direitos reservados.
         </motion.p>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };
 

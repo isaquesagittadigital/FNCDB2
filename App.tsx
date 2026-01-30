@@ -29,7 +29,23 @@ const App: React.FC = () => {
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
 
-  const handleLoginSuccess = () => setView(AppView.ENVIRONMENT_SELECTION);
+  // const handleLoginSuccess = () => setView(AppView.ENVIRONMENT_SELECTION); // Old flow
+
+  const handleLoginSuccess = (role: string) => {
+    // Map backend roles to frontend roles
+    // Backend: 'Admin', 'Consultor', 'Cliente'
+    // Frontend: 'admin', 'consultant', 'client'
+
+    let mappedRole: UserRole = 'consultant'; // default
+
+    if (role === 'Admin') mappedRole = 'admin';
+    else if (role === 'Cliente') mappedRole = 'client';
+    else if (role === 'Consultor') mappedRole = 'consultant';
+
+    setSelectedRole(mappedRole);
+    setView(AppView.DASHBOARD);
+  };
+
   const handleEnvironmentSelect = (role: UserRole) => {
     setSelectedRole(role);
     setView(AppView.DASHBOARD);
