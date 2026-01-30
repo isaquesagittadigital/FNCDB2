@@ -29,6 +29,7 @@ export const adminMenu: SidebarItem[] = [
         label: 'Cadastros',
         icon: PlusSquare,
         subItems: [
+            { id: 'clients', label: 'Clientes', icon: Users },
             { id: 'consultants', label: 'Consultores', icon: Users },
             { id: 'contracts', label: 'Contratos', icon: FileText },
             { id: 'invoices', label: 'Nota fiscal', icon: FileText },

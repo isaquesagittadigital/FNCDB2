@@ -23,6 +23,7 @@ import ProfileView from '../shared/ProfileView';
 import ApprovalList from './approval/ApprovalList';
 import ApprovalDetails from './approval/ApprovalDetails';
 import { ApprovalProcess } from './approval/types';
+import ClientsView from './clients/ClientsView';
 
 import { adminMenu } from './menu';
 
@@ -161,6 +162,8 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout }) => {
                     }
                 }
                 return <ApprovalList processes={processes} onViewDetails={handleViewDetails} />;
+            case 'clients':
+                return <ClientsView />;
             case 'registrations':
                 return (
                     <div className="space-y-6">
