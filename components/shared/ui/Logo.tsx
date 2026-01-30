@@ -20,7 +20,7 @@ export const LogoFull: React.FC<{ dark?: boolean; className?: string }> = ({ dar
   if (!dark) {
     return (
       <img
-        src="/assets/logos/LogoFonteBranca.svg"
+        src="/assets/logos/LogoFonteBranca.png"
         alt="FNCD Capital"
         className={className}
       />

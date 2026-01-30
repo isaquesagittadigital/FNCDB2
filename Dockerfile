@@ -4,7 +4,7 @@ FROM node:20-alpine AS build
 WORKDIR /app
 
 # Copiar arquivos de dependência
-COPY package.json ./
+COPY package.json package-lock.json ./
 
 # Instalar dependências
 # Nota: Se houver package-lock.json, copie-o também e use 'npm ci'

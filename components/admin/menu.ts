@@ -6,6 +6,7 @@ import {
     FileText,
     PieChart,
     Calendar,
+    Calculator,
     CreditCard,
     User,
     Users
@@ -51,8 +52,13 @@ export const adminMenu: SidebarItem[] = [
     },
     {
         id: 'payments',
-        label: 'Gerenciar pagamentos',
+        label: 'Pagamentos',
         icon: CreditCard
+    },
+    {
+        id: 'simulation',
+        label: 'Simulação',
+        icon: Calculator
     },
     {
         id: 'profile',
@@ -61,7 +67,7 @@ export const adminMenu: SidebarItem[] = [
     },
     {
         id: 'administrators',
-        label: 'Administradores',
+        label: 'Usuarios',
         icon: Users
     }
 ];
