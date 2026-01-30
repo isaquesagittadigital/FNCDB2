@@ -1,0 +1,121 @@
+import React, { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import SplashScreen from './components/shared/ui/SplashScreen';
+import LoginForm from './components/auth/LoginForm';
+import ForgotPassword from './components/auth/ForgotPassword';
+import EnvironmentSelection from './components/auth/EnvironmentSelection';
+import ClientFlow from './components/client/ClientFlow';
+import ConsultantFlow from './components/consultant/ConsultantFlow';
+import AdminFlow from './components/admin/AdminFlow';
+
+export enum AppView {
+  SPLASH = 'SPLASH',
+  LOGIN = 'LOGIN',
+  FORGOT_PASSWORD = 'FORGOT_PASSWORD',
+  ENVIRONMENT_SELECTION = 'ENVIRONMENT_SELECTION',
+  DASHBOARD = 'DASHBOARD'
+}
+
+export type UserRole = 'client' | 'consultant' | 'admin';
+
+const App: React.FC = () => {
+  const [view, setView] = useState<AppView>(AppView.SPLASH);
+  const [splashStep, setSplashStep] = useState(0);
+  const [selectedRole, setSelectedRole] = useState<UserRole>('consultant');
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setSplashStep(1), 1200);
+    const t2 = setTimeout(() => setView(AppView.LOGIN), 2800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  const handleLoginSuccess = () => setView(AppView.ENVIRONMENT_SELECTION);
+  const handleEnvironmentSelect = (role: UserRole) => {
+    setSelectedRole(role);
+    setView(AppView.DASHBOARD);
+  };
+  const handleLogout = () => setView(AppView.LOGIN);
+
+  const renderDashboard = () => {
+    switch (selectedRole) {
+      case 'client':
+        return <ClientFlow onLogout={handleLogout} />;
+      case 'consultant':
+        return <ConsultantFlow onLogout={handleLogout} />;
+      case 'admin':
+        return <AdminFlow onLogout={handleLogout} />;
+      default:
+        return <ConsultantFlow onLogout={handleLogout} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen relative bg-[#F8FAFB] overflow-hidden">
+      <AnimatePresence mode="wait">
+        {view === AppView.SPLASH && (
+          <motion.div
+            key="splash"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50"
+          >
+            <SplashScreen showText={splashStep === 1} />
+          </motion.div>
+        )}
+
+        {view === AppView.LOGIN && (
+          <motion.div
+            key="login"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="w-full min-h-screen"
+          >
+            <LoginForm
+              onForgotPassword={() => setView(AppView.FORGOT_PASSWORD)}
+              onLoginSuccess={handleLoginSuccess}
+            />
+          </motion.div>
+        )}
+
+        {view === AppView.FORGOT_PASSWORD && (
+          <motion.div
+            key="forgot"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="w-full min-h-screen"
+          >
+            <ForgotPassword onBackToLogin={() => setView(AppView.LOGIN)} />
+          </motion.div>
+        )}
+
+        {view === AppView.ENVIRONMENT_SELECTION && (
+          <motion.div
+            key="selection"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.05 }}
+            className="w-full min-h-screen"
+          >
+            <EnvironmentSelection onSelect={handleEnvironmentSelect} />
+          </motion.div>
+        )}
+
+        {view === AppView.DASHBOARD && (
+          <motion.div
+            key="dashboard"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="w-full min-h-screen"
+          >
+            {renderDashboard()}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default App;
