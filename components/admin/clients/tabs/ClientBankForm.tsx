@@ -42,15 +42,11 @@ const ClientBankForm: React.FC<ClientBankFormProps> = ({ clientId }) => {
     const fetchAccounts = async () => {
         setLoading(true);
         try {
-            // Placeholder: Replace with real API call
-            // const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients/${clientId}/bank-accounts`);
-            // const data = await res.json();
-            // setAccounts(data);
-
-            // Mock data for now
-            setAccounts([
-                { id: '1', banco: 'Banco Santander (Brasil) S.A.', agencia: '0000', digito_agencia: '0', conta: '00000000', digito_conta: '0', tipo_conta: 'Corrente', is_default: true }
-            ]);
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients/${clientId}/bank-accounts`);
+            if (res.ok) {
+                const data = await res.json();
+                setAccounts(data);
+            }
         } catch (error) {
             console.error(error);
         } finally {
@@ -60,18 +56,53 @@ const ClientBankForm: React.FC<ClientBankFormProps> = ({ clientId }) => {
 
     const handleAddAccount = async () => {
         if (!clientId) return;
-        // API Call to add
-        console.log("Adding account", newAccount);
-        // On success:
-        setAccounts([...accounts, { ...newAccount, id: Math.random().toString() }]);
-        setShowAddForm(false);
-        setNewAccount({ banco: '', agencia: '', digito_agencia: '', conta: '', digito_conta: '', tipo_conta: 'Corrente', is_default: false });
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients/${clientId}/bank-accounts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newAccount)
+            });
+
+            if (res.ok) {
+                const savedAccount = await res.json();
+                setAccounts([...accounts, savedAccount]);
+                setShowAddForm(false);
+                setNewAccount({
+                    banco: '',
+                    agencia: '',
+                    digito_agencia: '',
+                    conta: '',
+                    digito_conta: '',
+                    tipo_conta: 'Corrente',
+                    is_default: false
+                });
+            } else {
+                alert('Erro ao salvar conta bancária');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao salvar conta bancária');
+        }
     };
 
     const handleDelete = async (id: string) => {
-        // API call
-        console.log("Deleting", id);
-        setAccounts(accounts.filter(a => a.id !== id));
+        if (!window.confirm('Tem certeza que deseja excluir esta conta?')) return;
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients/${clientId}/bank-accounts/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (res.ok) {
+                setAccounts(accounts.filter(a => a.id !== id));
+            } else {
+                alert('Erro ao excluir conta');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao excluir conta');
+        }
     };
 
     if (!clientId) {

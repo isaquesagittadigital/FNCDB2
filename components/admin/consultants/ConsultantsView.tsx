@@ -2,25 +2,89 @@
 import React, { useState } from 'react';
 import { Plus, Home, ChevronRight, Edit2, Trash2, CheckCircle, Search, ArrowUpDown } from 'lucide-react';
 import { motion } from 'framer-motion';
+import ConsultantForm from './ConsultantForm';
 
 const ConsultantsView = () => {
-    // Mock data based on the image provided
-    const consultants = [
-        { id: 1, name: 'Renan Furlan Rigo 4', email: 'renan_f_r@hotmail.com', document: '56.413.433/0001-23', clients: 1, status: 'Ativo' },
-        { id: 2, name: 'Ricardo Ricchini Contesini', email: 'ricardo.ricchini@fncd.com.br', document: '59.209.301/0001-72', clients: 1, status: 'Ativo' },
-        { id: 3, name: 'Jacson Daniel de Almeida dos Santos', email: 'jackson.1500@gmail.com', document: '83.564.851/0001-87', clients: 0, status: 'Ativo' },
-        { id: 4, name: 'Dalton Marquez', email: 'madmarquezinvest@gmail.com', document: '60.220.661/0001-54', clients: 0, status: 'Ativo' },
-        { id: 5, name: 'Daniel Alves e Silva', email: 'daniel@sevensteel.com.br', document: '28.380.293/0001-73', clients: 0, status: 'Ativo' },
-        { id: 6, name: 'Patricia de Carvalho Aoki', email: 'patricia.aoki@ganbatteseguros.com.br', document: '57.497.748/0001-69', clients: 0, status: 'Ativo' },
-        { id: 7, name: 'Jerusa Casagrande', email: 'jcbpofinanceiro@gmail.com', document: '63.189.083/0001-29', clients: 1, status: 'Ativo' },
-        { id: 8, name: 'Rosimeire de Souza', email: 'rosesouza41@icloud.com', document: '63.019.472/0001-06', clients: 0, status: 'Ativo' },
-    ];
+    const [consultants, setConsultants] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<'list' | 'create' | 'edit'>('list');
+    const [selectedId, setSelectedId] = useState<string | null>(null);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [documentTerm, setDocumentTerm] = useState('');
 
+    React.useEffect(() => {
+        if (viewMode === 'list') {
+            fetchConsultants();
+        }
+    }, [viewMode]);
+
+    const fetchConsultants = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants`);
+            if (res.ok) {
+                const data = await res.json();
+                setConsultants(data);
+            }
+        } catch (error) {
+            console.error("Failed to fetch consultants", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleCreate = () => {
+        setSelectedId(null);
+        setViewMode('create');
+    };
+
+    const handleEdit = (id: string) => {
+        setSelectedId(id);
+        setViewMode('edit');
+    };
+
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Tem certeza que deseja excluir este consultor?')) return;
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants/${id}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                fetchConsultants();
+                alert('Consultor excluído com sucesso!');
+            } else {
+                alert('Erro ao excluir consultor.');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao excluir consultor.');
+        }
+    };
+
+    const handleBack = () => {
+        setViewMode('list');
+        setSelectedId(null);
+    };
+
+    // Filter logic
+    const filteredConsultants = consultants.filter(c => {
+        const matchesName = (c.nome_fantasia || '').toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesDoc = (c.cpf || c.cnpj || '').includes(documentTerm);
+        return matchesName && matchesDoc;
+    });
+
+    if (viewMode === 'create' || viewMode === 'edit') {
+        return (
+            <ConsultantForm
+                consultantId={selectedId}
+                onBack={handleBack}
+            />
+        );
+    }
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header with Breadcrumbs and Action Button */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
@@ -31,7 +95,10 @@ const ConsultantsView = () => {
                     </div>
                 </div>
 
-                <button className="bg-[#009BB6] hover:bg-[#008f9e] text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm active:scale-95">
+                <button
+                    onClick={handleCreate}
+                    className="bg-[#009BB6] hover:bg-[#008f9e] text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm active:scale-95"
+                >
                     <Plus size={18} />
                     Cadastrar novo consultor
                 </button>
@@ -99,41 +166,60 @@ const ConsultantsView = () => {
 
                 {/* Table Body */}
                 <div className="divide-y divide-slate-100">
-                    {consultants.map((consultant) => (
-                        <div
-                            key={consultant.id}
-                            className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-slate-50/50 transition-colors group text-sm"
-                        >
-                            <div className="col-span-3 pl-2 font-medium text-slate-700 truncate" title={consultant.name}>
-                                {consultant.name}
+                    {loading ? (
+                        <div className="p-8 text-center text-slate-400">Carregando consultores...</div>
+                    ) : filteredConsultants.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400">Nenhum consultor encontrado.</div>
+                    ) : (
+                        filteredConsultants.map((consultant) => (
+                            <div
+                                key={consultant.id}
+                                className="grid grid-cols-12 gap-4 p-4 items-center hover:bg-slate-50/50 transition-colors group text-sm"
+                            >
+                                <div className="col-span-3 pl-2 font-medium text-slate-700 truncate" title={consultant.nome_fantasia}>
+                                    {consultant.nome_fantasia}
+                                </div>
+                                <div className="col-span-3 text-slate-500 truncate" title={consultant.email}>
+                                    {consultant.email}
+                                </div>
+                                <div className="col-span-2 text-slate-500 font-mono text-xs">
+                                    {consultant.cpf || consultant.cnpj || '-'}
+                                </div>
+                                {consultant.client_count || 0}
+                                <div className="col-span-1 flex justify-center">
+                                    <span className={`px-3 py-0.5 rounded-full text-xs font-semibold border ${consultant.status_cliente === 'Ativo' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                        consultant.status_cliente === 'Rejeitado' ? 'bg-red-50 text-red-600 border-red-100' :
+                                            'bg-yellow-50 text-yellow-600 border-yellow-100'
+                                        }`}>
+                                        {consultant.status_cliente || 'Pendente'}
+                                    </span>
+                                </div>
+                                <div className="col-span-2 flex items-center justify-end gap-2 pr-2">
+                                    <button
+                                        onClick={() => handleDelete(consultant.id)}
+                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                        title="Excluir"
+                                    >
+                                        <Trash2 size={16} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleEdit(consultant.id)}
+                                        className="p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-all"
+                                        title="Editar"
+                                    >
+                                        <Edit2 size={16} />
+                                    </button>
+                                    <button
+                                        onClick={() => alert(`Funcionalidade de verificação do consultor ${consultant.nome_fantasia} em desenvolvimento.`)}
+                                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                        title="Verificar"
+                                    >
+                                        <CheckCircle size={16} />
+                                    </button>
+                                </div>
                             </div>
-                            <div className="col-span-3 text-slate-500 truncate" title={consultant.email}>
-                                {consultant.email}
-                            </div>
-                            <div className="col-span-2 text-slate-500 font-mono text-xs">
-                                {consultant.document}
-                            </div>
-                            <div className="col-span-1 text-center text-slate-600 font-medium">
-                                {consultant.clients}
-                            </div>
-                            <div className="col-span-1 flex justify-center">
-                                <span className="px-3 py-0.5 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-600 border-emerald-100">
-                                    {consultant.status}
-                                </span>
-                            </div>
-                            <div className="col-span-2 flex items-center justify-end gap-2 pr-2">
-                                <button className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Excluir">
-                                    <Trash2 size={16} />
-                                </button>
-                                <button className="p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-all" title="Editar">
-                                    <Edit2 size={16} />
-                                </button>
-                                <button className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all" title="Verificar">
-                                    <CheckCircle size={16} />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                        ))
+                    )}
                 </div>
             </motion.div>
         </div>

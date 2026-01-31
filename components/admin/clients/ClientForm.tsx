@@ -76,6 +76,32 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
         }
     };
 
+    const handleStatusChange = async (newStatus: string) => {
+        if (!currentClientId || !window.confirm(`Tem certeza que deseja alterar o status para ${newStatus}?`)) return;
+
+        setLoading(true);
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients/${currentClientId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status_cliente: newStatus })
+            });
+
+            if (res.ok) {
+                // Refresh data
+                fetchClientData(currentClientId);
+                alert(`Status alterado para ${newStatus}`);
+            } else {
+                alert('Erro ao alterar status');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Erro ao alterar status');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleSaveAddress = async (data: any) => {
         if (!currentClientId) return;
         await handleSaveGeneral(data); // Re-use update logic since address is on the user table
@@ -110,7 +136,43 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
                         <h1 className="text-2xl font-bold text-[#002B49]">
                             {currentClientId ? 'Editar cliente' : 'Cadastrar cliente'}
                         </h1>
+
+                        {clientData?.status_cliente && (
+                            <div className="flex items-center gap-2 mt-2">
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold border ${clientData.status_cliente === 'Ativo' || clientData.status_cliente === 'Apto'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                    : clientData.status_cliente === 'Rejeitado'
+                                        ? 'bg-red-50 text-red-700 border-red-100'
+                                        : 'bg-yellow-50 text-yellow-700 border-yellow-100'
+                                    }`}>
+                                    {clientData.status_cliente}
+                                </span>
+                            </div>
+                        )}
                     </div>
+
+                    {/* Status Actions */}
+                    {currentClientId && clientData && (
+                        <div className="ml-auto flex gap-2">
+                            {(clientData.status_cliente === 'Pendente' || clientData.status_cliente === 'Rejeitado') && (
+                                <button
+                                    onClick={() => handleStatusChange('Apto')}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm"
+                                >
+                                    Aprovar
+                                </button>
+                            )}
+
+                            {(clientData.status_cliente === 'Pendente' || clientData.status_cliente === 'Apto' || clientData.status_cliente === 'Ativo') && (
+                                <button
+                                    onClick={() => handleStatusChange('Rejeitado')}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-bold shadow-sm"
+                                >
+                                    Rejeitar
+                                </button>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Tabs */}
