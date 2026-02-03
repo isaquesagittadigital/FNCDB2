@@ -1,8 +1,8 @@
 import React from 'react';
-import { LayoutGrid, ArrowUpRight } from 'lucide-react';
+import { LayoutGrid, ArrowUpRight, Calculator } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const Simulator = () => {
+const Simulator = ({ onOpen }: { onOpen?: () => void }) => {
     return (
         <div className="flex items-center justify-center p-6 h-[calc(100vh-140px)]">
             <motion.div
@@ -12,7 +12,7 @@ const Simulator = () => {
             >
                 <div className="flex justify-center mb-6">
                     <div className="text-[#009BB6]">
-                        <LayoutGrid size={48} />
+                        <Calculator size={48} />
                     </div>
                 </div>
 
@@ -28,11 +28,7 @@ const Simulator = () => {
                 </div>
 
                 <button
-                    onClick={() => {
-                        // TODO: Implement navigation or modal opening logic
-                        console.log("Abrir Simulador clicked");
-                        alert("Funcionalidade de abrir simulador a ser implementada.");
-                    }}
+                    onClick={onOpen}
                     className="bg-[#009BB6] hover:bg-[#008f9e] text-white font-bold py-4 px-8 rounded-xl inline-flex items-center gap-2 transition-all shadow-md hover:shadow-xl hover:shadow-[#009BB6]/20 active:scale-95"
                 >
                     <div className="bg-white/20 p-1 rounded">

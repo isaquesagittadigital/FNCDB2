@@ -105,9 +105,11 @@ const MOCK_PROCESSES: ApprovalProcess[] = [
 
 interface AdminFlowProps {
     onLogout: () => void;
+    onOpenSimulator?: () => void;
+    userProfile?: any;
 }
 
-const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout }) => {
+const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userProfile }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [processes, setProcesses] = useState<ApprovalProcess[]>(MOCK_PROCESSES);
     const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
@@ -146,7 +148,7 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout }) => {
             case 'dashboard':
                 return <AdminDashboard />;
             case 'simulation':
-                return <Simulator />;
+                return <Simulator onOpen={onOpenSimulator} />;
             case 'approval':
                 if (selectedProcessId) {
                     const process = processes.find(p => p.id === selectedProcessId);
@@ -230,8 +232,9 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout }) => {
                 if (tab !== 'approval') setSelectedProcessId(null);
             }}
             user={{
-                name: 'Administrador',
-                email: 'admin@fncdcapital.com'
+                name: userProfile?.nome_fantasia || userProfile?.razao_social || userProfile?.nome || 'Administrador',
+                email: userProfile?.email || 'admin@fncdcapital.com',
+                avatarUrl: userProfile?.foto_perfil || userProfile?.avatar_url
             }}
             onLogout={onLogout}
         >

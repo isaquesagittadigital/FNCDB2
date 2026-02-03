@@ -47,7 +47,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           onNotificationClick={() => onTabChange('notifications')}
         />
 
-        <div className="flex-1 overflow-y-auto p-8 bg-[#F8FAFB]">
+        <div className="flex-1 overflow-y-auto p-4 bg-[#F8FAFB]">
           {children}
         </div>
       </main>

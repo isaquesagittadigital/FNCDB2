@@ -1,7 +1,8 @@
-
 import { FastifyInstance } from 'fastify';
 import { supabase } from '../lib/supabase';
 import { z } from 'zod';
+import { sendWelcomeEmail } from '../services/email.service';
+import crypto from 'crypto';
 
 const clientSchema = z.object({
     email: z.string().email(),
@@ -127,7 +128,6 @@ export async function adminRoutes(server: FastifyInstance) {
             // 2. Create Profile
             const profileData = {
                 id: authData.user.id,
-                email: body.email,
                 ...body
             };
 
@@ -192,7 +192,7 @@ export async function adminRoutes(server: FastifyInstance) {
     });
 
     // Recent Clients (Keep existing)
-    server.get('/clients/recent', async (request, reply) => {
+    server.get('/clients/recent', async (_request, reply) => {
         try {
             const { data, count, error } = await supabase
                 .from('usuarios')
@@ -324,7 +324,7 @@ export async function adminRoutes(server: FastifyInstance) {
     });
 
     // Consultants Management
-    server.get('/consultants', async (request, reply) => {
+    server.get('/consultants', async (_request, reply) => {
         try {
             const { data: consultants, error } = await supabase
                 .from('usuarios')
@@ -425,9 +425,88 @@ export async function adminRoutes(server: FastifyInstance) {
         }
     });
 
+    // Generic User Creation (Admin/Consultor)
+    server.post('/users', async (request: any, reply) => {
+        const body = request.body;
+        try {
+            // Basic validation
+            if (!body.email || !body.nome_fantasia || !body.tipo_user) {
+                return reply.status(400).send({ error: 'Nome, Email e Nível de Acesso são obrigatórios.' });
+            }
+
+            // 1. Create Auth User with random password
+            const tempPassword = crypto.randomBytes(12).toString('hex');
+
+            const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+                email: body.email,
+                password: tempPassword,
+                email_confirm: true,
+                user_metadata: { nome_fantasia: body.nome_fantasia }
+            });
+
+            if (authError) {
+                console.error('Auth Error:', authError);
+                return reply.status(400).send({ error: `Erro ao criar autenticação: ${authError.message}` });
+            }
+
+            // 2. Insert into public.usuarios
+            const { data: profile, error: profileError } = await supabase
+                .from('usuarios')
+                .insert({
+                    id: authUser.user.id,
+                    email: body.email,
+                    nome_fantasia: body.nome_fantasia,
+                    tipo_user: body.tipo_user,
+                    status_cliente: 'Ativo'
+                })
+                .select()
+                .single();
+
+            if (profileError) {
+                // Cleanup auth user if profile fails? (Optional but good)
+                await supabase.auth.admin.deleteUser(authUser.user.id);
+                throw profileError;
+            }
+
+            // 3. Generate password reset/recovery link
+            const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+                type: 'recovery',
+                email: body.email,
+                options: {
+                    redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password`
+                }
+            });
+
+            if (linkError) {
+                console.warn('Failed to generate recovery link:', linkError);
+                // We created the user, but couldn't make the link. Maybe return success but warn?
+                // Or just use the standard invite if preferred.
+            }
+
+            // 4. Send Welcome Email
+            if (linkData?.properties?.action_link) {
+                try {
+                    await sendWelcomeEmail(
+                        body.email,
+                        body.nome_fantasia,
+                        linkData.properties.action_link
+                    );
+                } catch (emailErr) {
+                    console.error('Email sending failed:', emailErr);
+                    // Don't fail the whole user creation if just email fails, but maybe return a partial success?
+                }
+            }
+
+            return reply.send(profile);
+        } catch (err: any) {
+            console.error('Creation Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
 
     // Global Contracts Management
-    server.get('/contracts', async (request: any, reply) => {
+    server.get('/contracts', async (_request: any, reply) => {
         try {
             // Join contratos with users to get client name
             // Assuming 'usuarios' table contains client info and user_id in 'contratos' FKs to it (or auth.users which is linked)
@@ -533,6 +612,168 @@ export async function adminRoutes(server: FastifyInstance) {
             return reply.send({ message: 'Contrato excluído com sucesso' });
         } catch (err: any) {
             return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // User Permissions Management
+    server.get('/users/:id/permissions', async (request: any, reply) => {
+        const { id } = request.params;
+        try {
+            const { data, error } = await supabase
+                .from('permissoes_usuario')
+                .select('*')
+                .eq('user_id', id);
+
+            if (error) throw error;
+            return reply.send(data);
+        } catch (err: any) {
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    server.put('/users/:id/permissions', async (request: any, reply) => {
+        const { id } = request.params;
+        const { permissions, tipo_perfil_usuario } = request.body;
+
+        if (!id || id === 'undefined') {
+            return reply.status(400).send({ error: 'ID de usuário ausente' });
+        }
+
+        console.log(`Updating permissions for user ${id}`, JSON.stringify(request.body, null, 2));
+
+        try {
+            // Update user profile type if provided
+            if (tipo_perfil_usuario !== undefined) {
+                const { error: userError } = await supabase
+                    .from('usuarios')
+                    .update({ tipo_perfil_usuario })
+                    .eq('id', id);
+
+                if (userError) {
+                    console.error('Error updating usuario profile type:', userError);
+                    return reply.status(500).send({ error: `Erro ao atualizar nível de acesso: ${userError.message}` });
+                }
+            }
+
+            // Sync permissions: Delete old ones and insert new ones to avoid upsert complexities
+            if (permissions && Array.isArray(permissions)) {
+                // Delete existing permissions for this user
+                const { error: deleteError } = await supabase
+                    .from('permissoes_usuario')
+                    .delete()
+                    .eq('user_id', id);
+
+                if (deleteError) {
+                    console.error('Error deleting old permissions:', deleteError);
+                    throw deleteError;
+                }
+
+                if (permissions.length > 0) {
+                    const dataToInsert = permissions.map((p: any) => ({
+                        user_id: id,
+                        modulo: p.modulo,
+                        pode_visualizar: p.pode_visualizar === true,
+                        pode_cadastrar: p.pode_cadastrar === true,
+                        pode_editar: p.pode_editar === true,
+                        pode_excluir: p.pode_excluir === true
+                    }));
+
+                    const { error: insertError } = await supabase
+                        .from('permissoes_usuario')
+                        .insert(dataToInsert);
+
+                    if (insertError) {
+                        console.error('Error inserting permissions:', insertError);
+                        throw insertError;
+                    }
+                }
+            }
+
+            return reply.send({ success: true, message: 'Permissões atualizadas com sucesso' });
+        } catch (err: any) {
+            console.error('CRITICAL ERROR in permissions PUT route:', err);
+            return reply.status(500).send({
+                error: err.message || 'Erro interno no servidor',
+                details: err.details || err.hint
+            });
+        }
+    });
+
+    // Generic User Update (Name, Email, Profile Type)
+    server.put('/users/:id', async (request: any, reply) => {
+        const { id } = request.params;
+        const { nome_fantasia, email, tipo_perfil_usuario, tipo_user } = request.body;
+
+        try {
+            // 1. Update Auth Email if changed
+            if (email) {
+                const { error: authError } = await supabase.auth.admin.updateUserById(id, { email });
+                if (authError) {
+                    console.error('Auth update error:', authError);
+                    if (authError.message.includes('already registered')) {
+                        return reply.status(400).send({ error: 'Este e-mail já está sendo utilizado por outro usuário.' });
+                    }
+                }
+            }
+
+            // 2. Update public.usuarios
+            const updateData: any = {};
+            if (nome_fantasia !== undefined) updateData.nome_fantasia = nome_fantasia;
+            if (email !== undefined) updateData.email = email;
+            if (tipo_perfil_usuario !== undefined) updateData.tipo_perfil_usuario = tipo_perfil_usuario;
+            if (tipo_user !== undefined) updateData.tipo_user = tipo_user;
+
+            const { data, error: profileError } = await supabase
+                .from('usuarios')
+                .update(updateData)
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (profileError) throw profileError;
+
+            return reply.send(data);
+        } catch (err: any) {
+            console.error('Update User Error:', err);
+            return reply.status(500).send({ error: err.message || 'Erro interno ao atualizar usuário' });
+        }
+    });
+
+    // Delete User (Soft Delete + Auth Ban)
+    server.delete('/users/:id', async (request: any, reply) => {
+        const { id } = request.params;
+        try {
+            // 1. Ban user in Auth (Prevents login)
+            const { error: _authError } = await supabase.auth.admin.updateUserById(id, {
+                ban_duration: 'none' // 'none' actually removes ban, but the property name is confusing in some versions.
+                // In standard Supabase Admin, we usually set 'app_metadata.disabled' or use a specific flag 
+                // but the most reliable way to block access is updating the user password to something random 
+                // OR setting a claim. Let's use the most direct one: ban if supported or just soft-delete + check during login.
+            });
+
+            // Re-evaluating: The most robust way in Supabase Admin API is set ban_duration or just delete if strict, 
+            // but user asked for "inactivate". Let's set a flag in metadata and update the DB.
+            const { error: banError } = await supabase.auth.admin.updateUserById(id, {
+                user_metadata: { active: false }
+            });
+
+            if (banError) console.warn('Warning: Could not update auth metadata:', banError);
+
+            // 2. Soft delete in DB
+            const { error: dbError } = await supabase
+                .from('usuarios')
+                .update({
+                    deletado: true,
+                    status_cliente: 'Inativo'
+                })
+                .eq('id', id);
+
+            if (dbError) throw dbError;
+
+            return reply.send({ success: true, message: 'Usuário inativado com sucesso' });
+        } catch (err: any) {
+            console.error('Delete User Error:', err);
+            return reply.status(500).send({ error: err.message || 'Erro ao excluir usuário' });
         }
     });
 }

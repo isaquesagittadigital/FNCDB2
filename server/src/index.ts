@@ -12,7 +12,9 @@ const server: FastifyInstance = Fastify({
 
 // Plugins
 server.register(cors, {
-    origin: true // Allow all origins for now, configure strictly in production
+    origin: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 });
 
 // Routes

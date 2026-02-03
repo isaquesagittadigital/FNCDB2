@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
 import { LogoIcon, LogoWatermark } from '../shared/ui/Logo';
+import { supabase } from '../../lib/supabase';
 
 interface LoginFormProps {
   onForgotPassword: () => void;
@@ -31,7 +32,14 @@ const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess 
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error("Failed to parse response:", responseText);
+        throw new Error(`Erro no servidor: Resposta inválida (${response.status})`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Erro ao realizar login');
@@ -40,6 +48,12 @@ const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess 
       console.log('Login successful:', data);
       localStorage.setItem('session', JSON.stringify(data.session));
       localStorage.setItem('profile', JSON.stringify(data.profile)); // Save profile for persistence
+
+      // Establish Supabase session for client-side usage (ProfileView, etc)
+      if (data.session) {
+        const { error: sessionError } = await supabase.auth.setSession(data.session);
+        if (sessionError) console.error("Failed to set Supabase session:", sessionError);
+      }
 
       // Pass the role to the callback
       onLoginSuccess(data.profile.tipo_user);

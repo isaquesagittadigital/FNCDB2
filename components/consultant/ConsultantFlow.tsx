@@ -31,9 +31,10 @@ import { consultantMenu } from './menu';
 
 interface ConsultantFlowProps {
     onLogout: () => void;
+    userProfile?: any;
 }
 
-const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout }) => {
+const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
 
     const renderContent = () => {
@@ -62,8 +63,9 @@ const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout }) => {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             user={{
-                name: 'Carla Gandolfo',
-                email: 'carlagandolgo@fncdcapital.com'
+                name: userProfile?.nome_fantasia || userProfile?.razao_social || userProfile?.nome || 'Consultor',
+                email: userProfile?.email || 'consultor@fncdcapital.com',
+                avatarUrl: userProfile?.foto_perfil || userProfile?.avatar_url
             }}
             onLogout={onLogout}
         >

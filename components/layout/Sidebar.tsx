@@ -4,16 +4,17 @@ import {
     ChevronLeft,
     ChevronDown,
     LogOut,
-    User,
-    Menu
+    User
 } from 'lucide-react';
 import { LogoIcon, LogoFull } from '../shared/ui/Logo';
+import { usePermissions } from '../shared/contexts/PermissionsContext';
 
 export interface SidebarItem {
     id: string;
     label: string;
     icon: any;
     subItems?: SidebarItem[];
+    permissionModule?: string;
 }
 
 interface SidebarProps {
@@ -30,6 +31,83 @@ interface SidebarProps {
     onToggle: () => void;
 }
 
+const NavItem: React.FC<{
+    item: SidebarItem,
+    isSub?: boolean,
+    activeTab: string,
+    isOpen: boolean,
+    onTabChange: (id: string) => void
+}> = ({ item, isSub = false, activeTab, isOpen, onTabChange }) => {
+    const Icon = item.icon;
+    const isActive = activeTab === item.id;
+
+    return (
+        <button
+            onClick={() => onTabChange(item.id)}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
+                ? 'bg-[#E6F6F7] text-[#00A3B1] font-bold shadow-sm'
+                : 'text-[#64748B] hover:bg-slate-50 font-medium'
+                } ${isSub ? 'pl-10 text-xs' : ''}`}
+        >
+            <Icon size={isSub ? 16 : 20} className={isActive ? 'text-[#00A3B1]' : 'text-[#64748B]'} />
+            {isOpen && <span className="truncate">{item.label}</span>}
+        </button>
+    );
+};
+
+const NavGroup: React.FC<{
+    item: SidebarItem,
+    activeTab: string,
+    isOpen: boolean,
+    onTabChange: (id: string) => void,
+    expandedMenus: Record<string, boolean>,
+    toggleMenu: (id: string) => void
+}> = ({ item, activeTab, isOpen, onTabChange, expandedMenus, toggleMenu }) => {
+    const Icon = item.icon;
+
+    const isParentActive = (item: SidebarItem) => {
+        if (!item.subItems) return false;
+        return item.subItems.some(sub => sub.id === activeTab);
+    };
+
+    const hasActiveChild = isParentActive(item);
+
+    return (
+        <div className="space-y-1">
+            <button
+                onClick={() => toggleMenu(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 text-[#64748B] hover:bg-slate-50 font-medium rounded-xl group transition-all ${hasActiveChild ? 'text-[#002B49] bg-slate-50' : ''
+                    }`}
+            >
+                <div className="flex items-center gap-3">
+                    <Icon size={20} className={hasActiveChild ? 'text-[#00A3B1]' : 'text-[#64748B]'} />
+                    {isOpen && <span>{item.label}</span>}
+                </div>
+                {isOpen && (
+                    <ChevronDown
+                        size={14}
+                        className={`transition-transform ${expandedMenus[item.id] ? '' : '-rotate-90'}`}
+                    />
+                )}
+            </button>
+            {expandedMenus[item.id] && isOpen && (
+                <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                    {item.subItems?.map(sub => (
+                        <NavItem
+                            key={sub.id}
+                            item={sub}
+                            isSub
+                            activeTab={activeTab}
+                            isOpen={isOpen}
+                            onTabChange={onTabChange}
+                        />
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const Sidebar: React.FC<SidebarProps> = ({
     items,
     activeTab,
@@ -40,66 +118,15 @@ const Sidebar: React.FC<SidebarProps> = ({
     onToggle
 }) => {
     const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+    const { hasPermission } = usePermissions();
+
+    const canShow = (item: SidebarItem) => {
+        if (!item.permissionModule) return true;
+        return hasPermission(item.permissionModule, 'visualizar');
+    };
 
     const toggleMenu = (menuId: string) => {
         setExpandedMenus(prev => ({ ...prev, [menuId]: !prev[menuId] }));
-    };
-
-    // Check if a parent menu should be active (if one of its children is active)
-    const isParentActive = (item: SidebarItem) => {
-        if (!item.subItems) return false;
-        return item.subItems.some(sub => sub.id === activeTab);
-    };
-
-    const NavItem = ({ item, isSub = false }: { item: SidebarItem, isSub?: boolean }) => {
-        const Icon = item.icon;
-        const isActive = activeTab === item.id;
-
-        return (
-            <button
-                onClick={() => onTabChange(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
-                    ? 'bg-[#E6F6F7] text-[#00A3B1] font-bold shadow-sm'
-                    : 'text-[#64748B] hover:bg-slate-50 font-medium'
-                    } ${isSub ? 'pl-10 text-xs' : ''}`}
-            >
-                <Icon size={isSub ? 16 : 20} className={isActive ? 'text-[#00A3B1]' : 'text-[#64748B]'} />
-                {isOpen && <span className="truncate">{item.label}</span>}
-            </button>
-        );
-    };
-
-    const NavGroup = ({ item }: { item: SidebarItem }) => {
-        const Icon = item.icon;
-        const hasActiveChild = isParentActive(item);
-
-        return (
-            <div className="space-y-1">
-                <button
-                    onClick={() => toggleMenu(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 text-[#64748B] hover:bg-slate-50 font-medium rounded-xl group transition-all ${hasActiveChild ? 'text-[#002B49] bg-slate-50' : ''
-                        }`}
-                >
-                    <div className="flex items-center gap-3">
-                        <Icon size={20} className={hasActiveChild ? 'text-[#00A3B1]' : 'text-[#64748B]'} />
-                        {isOpen && <span>{item.label}</span>}
-                    </div>
-                    {isOpen && (
-                        <ChevronDown
-                            size={14}
-                            className={`transition-transform ${expandedMenus[item.id] ? '' : '-rotate-90'}`}
-                        />
-                    )}
-                </button>
-                {expandedMenus[item.id] && isOpen && (
-                    <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                        {item.subItems?.map(sub => (
-                            <NavItem key={sub.id} item={sub} isSub />
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
     };
 
     return (
@@ -116,19 +143,42 @@ const Sidebar: React.FC<SidebarProps> = ({
             </button>
 
             <nav className="flex-1 px-4 mt-6 space-y-1 overflow-y-auto no-scrollbar">
-                {items.map(item => (
-                    item.subItems ? (
-                        <NavGroup key={item.id} item={item} />
+                {items.filter(canShow).map(item => {
+                    const filteredSubItems = item.subItems?.filter(canShow);
+                    const itemWithFilteredSubs = { ...item, subItems: filteredSubItems };
+
+                    if (item.subItems && filteredSubItems?.length === 0) return null;
+
+                    return itemWithFilteredSubs.subItems ? (
+                        <NavGroup
+                            key={item.id}
+                            item={itemWithFilteredSubs}
+                            activeTab={activeTab}
+                            isOpen={isOpen}
+                            onTabChange={onTabChange}
+                            expandedMenus={expandedMenus}
+                            toggleMenu={toggleMenu}
+                        />
                     ) : (
-                        <NavItem key={item.id} item={item} />
-                    )
-                ))}
+                        <NavItem
+                            key={item.id}
+                            item={itemWithFilteredSubs}
+                            activeTab={activeTab}
+                            isOpen={isOpen}
+                            onTabChange={onTabChange}
+                        />
+                    );
+                })}
             </nav>
 
             <div className="p-4 border-t border-slate-100">
                 <div className={`flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm ${!isOpen && 'justify-center'}`}>
                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
-                        <User className="text-slate-400" size={20} />
+                        {user.avatarUrl ? (
+                            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                        ) : (
+                            <User className="text-slate-400" size={20} />
+                        )}
                     </div>
                     {isOpen && (
                         <div className="flex-1 min-w-0">

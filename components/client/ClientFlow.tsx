@@ -19,9 +19,10 @@ import { clientMenu } from './menu';
 
 interface ClientFlowProps {
     onLogout: () => void;
+    userProfile?: any;
 }
 
-const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout }) => {
+const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout, userProfile }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
 
     const renderContent = () => {
@@ -46,8 +47,8 @@ const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout }) => {
             activeTab={activeTab}
             onTabChange={setActiveTab}
             user={{
-                name: 'Samuel Alves de Souza',
-                email: 'samuel.alves@fncdcapital.com' // Example email
+                name: userProfile?.nome_fantasia || userProfile?.razao_social || userProfile?.nome || 'Cliente',
+                email: userProfile?.email || 'cliente@fncdcapital.com'
             }}
             onLogout={onLogout}
         >

@@ -22,18 +22,19 @@ export const adminMenu: SidebarItem[] = [
     {
         id: 'approval',
         label: 'Aprovação',
-        icon: CheckCircle
+        icon: CheckCircle,
+        permissionModule: 'aprovacao'
     },
     {
         id: 'registrations',
         label: 'Cadastros',
         icon: PlusSquare,
         subItems: [
-            { id: 'clients', label: 'Clientes', icon: Users },
-            { id: 'consultants', label: 'Consultores', icon: Users },
-            { id: 'contracts', label: 'Contratos', icon: FileText },
-            { id: 'invoices', label: 'Nota fiscal', icon: FileText },
-            { id: 'income_reports', label: 'Informe de rendimentos', icon: FileText }
+            { id: 'clients', label: 'Clientes', icon: Users, permissionModule: 'clientes' },
+            { id: 'consultants', label: 'Consultores', icon: Users, permissionModule: 'consultores' },
+            { id: 'contracts', label: 'Contratos', icon: FileText, permissionModule: 'contratos' },
+            { id: 'invoices', label: 'Nota fiscal', icon: FileText, permissionModule: 'nota_fiscal' },
+            { id: 'income_reports', label: 'Informe de rendimentos', icon: FileText, permissionModule: 'informe_rendimentos' }
         ]
     },
     {
@@ -49,12 +50,14 @@ export const adminMenu: SidebarItem[] = [
     {
         id: 'calendar',
         label: 'Calendário',
-        icon: Calendar
+        icon: Calendar,
+        permissionModule: 'calendario'
     },
     {
         id: 'payments',
         label: 'Pagamentos',
-        icon: CreditCard
+        icon: CreditCard,
+        permissionModule: 'gerenciar_pagamentos'
     },
     {
         id: 'simulation',
@@ -69,6 +72,7 @@ export const adminMenu: SidebarItem[] = [
     {
         id: 'administrators',
         label: 'Usuarios',
-        icon: Users
+        icon: Users,
+        permissionModule: 'usuarios'
     }
 ];
