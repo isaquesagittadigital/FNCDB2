@@ -566,6 +566,7 @@ export async function adminRoutes(server: FastifyInstance) {
                 return reply.status(400).send({ error: 'Cliente (user_id) e Título são obrigatórios.' });
             }
 
+            // Map frontend fields to DB columns if they mismatch, or just pass body
             const { data, error } = await supabase
                 .from('contratos')
                 .insert(body)
@@ -584,7 +585,8 @@ export async function adminRoutes(server: FastifyInstance) {
         const body = request.body;
         try {
             delete body.id; // protect ID
-            delete body.user_id; // prevent changing owner? Or allow it? Let's protect owner for now.
+            // Allow user_id update if explicitly needed, but usually kept for safety.
+            // For now, let's just pass the body as is (Supabase update is partial).
 
             const { data, error } = await supabase
                 .from('contratos')
