@@ -6,6 +6,8 @@ import ClientAddressForm from './tabs/ClientAddressForm';
 import ClientBankForm from './tabs/ClientBankForm';
 import ClientContractsTab from './tabs/ClientContractsTab';
 import SuccessModal from '../../shared/modals/SuccessModal';
+import { PDFDownloadLink } from '@react-pdf/renderer';
+import ContractPDF from './ContractPDFTemplate';
 
 interface ClientFormProps {
     clientId: string | null;
@@ -174,6 +176,21 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
                                 >
                                     Rejeitar
                                 </button>
+                            )}
+
+                            {currentClientId && clientData && (
+                                <PDFDownloadLink
+                                    document={<ContractPDF cliente={clientData} />}
+                                    fileName={`Contrato_${clientData.nome_completo || clientData.razao_social || currentClientId}.pdf`}
+                                    className="bg-[#002B49] hover:bg-[#001D32] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center gap-2"
+                                >
+                                    {({ loading }) => (
+                                        <>
+                                            <FileText size={18} />
+                                            {loading ? 'Gerando...' : 'Gerar Contrato'}
+                                        </>
+                                    )}
+                                </PDFDownloadLink>
                             )}
                         </div>
                     )}
