@@ -124,10 +124,28 @@ const ConsultantsList: React.FC<ConsultantsListProps> = ({ onEdit }) => {
         }
     };
 
-    // Initial fetch and on page change
+    const isInitialMount = React.useRef(true);
+
+    // Page change fetch
     useEffect(() => {
+        if (isInitialMount.current) return;
         fetchConsultants();
     }, [page]);
+
+    // Debounced fetch for filters
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (isInitialMount.current) {
+                isInitialMount.current = false;
+                fetchConsultants();
+                return;
+            }
+            setPage(1);
+            fetchConsultants();
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [filters]);
 
     const handleFilterChange = (field: string, value: string) => {
         const newFilters = { ...filters, [field]: value };
@@ -258,16 +276,6 @@ const ConsultantsList: React.FC<ConsultantsListProps> = ({ onEdit }) => {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => {
-                                setPage(1);
-                                fetchConsultants();
-                            }}
-                            className="bg-white border border-slate-200 text-[#002B49] px-6 py-3 rounded-xl font-bold transition-all hover:bg-slate-50 flex items-center gap-2 active:scale-95 shadow-sm"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-                            Pesquisar
-                        </button>
                         {isFilterActive && (
                             <button
                                 onClick={resetFilters}

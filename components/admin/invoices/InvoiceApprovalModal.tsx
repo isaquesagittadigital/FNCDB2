@@ -47,43 +47,56 @@ const InvoiceApprovalModal: React.FC<InvoiceApprovalModalProps> = ({
                     className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden relative flex flex-col max-h-[90vh]"
                 >
                     {/* Header - Fixed */}
-                    <div className="p-8 pb-4 border-b border-slate-50 relative shrink-0">
+                    <div className="p-8 pb-6 border-b border-slate-50 relative shrink-0 bg-gradient-to-br from-white to-slate-50/50">
                         <button
                             onClick={onClose}
-                            className="absolute right-6 top-6 text-slate-400 hover:text-slate-600 transition-colors bg-slate-50 p-1 rounded-full z-10"
+                            className="absolute right-6 top-6 text-slate-400 hover:text-slate-600 transition-colors bg-white/80 backdrop-blur-sm shadow-sm border border-slate-100 p-1.5 rounded-xl z-20"
                         >
-                            <X size={20} />
+                            <X size={18} />
                         </button>
 
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 bg-[#E6F6F7] text-[#00A3B1] rounded-full flex items-center justify-center shadow-sm">
-                                    <Check size={24} strokeWidth={3} />
-                                </div>
-                                <h3 className="text-xl font-bold text-[#002B49]">Situação da nota fiscal</h3>
-                            </div>
-                            <span className="px-3 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded-lg border border-orange-100">
-                                {invoice?.status || 'Processando'}
-                            </span>
+                            <h3 className="text-2xl font-black text-[#002B49] tracking-tight">Análise da Nota</h3>
                         </div>
                     </div>
 
                     {/* Scrollable Content */}
                     <div className="flex-1 overflow-y-auto p-8 pt-6 custom-scrollbar">
                         <form onSubmit={handleSubmit} className="space-y-6">
-                            <Field
-                                label="Título da nota"
-                                value={invoice?.titulo}
-                                disabled
-                                required
-                            />
+                            {/* Data Display Section */}
+                            <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-2">
+                                    <div className="flex items-start gap-3">
+                                        <div className="mt-1 p-2 bg-white rounded-lg shadow-sm text-slate-400">
+                                            <FileText size={18} />
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Identificação da Nota</p>
+                                            <p className="text-base font-bold text-[#002B49]">{invoice?.titulo}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Status Atual</span>
+                                        <span className={`px-3 py-1 text-[10px] font-black rounded-lg border uppercase tracking-wider
+                                            ${invoice?.status === 'Aprovada' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                invoice?.status === 'Rejeitada' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                                    'bg-orange-50 text-orange-600 border-orange-100'}`}>
+                                            {invoice?.status || 'Processando'}
+                                        </span>
+                                    </div>
+                                </div>
 
-                            <Field
-                                label="Valor da nota"
-                                value={invoice?.valor}
-                                disabled
-                                required
-                            />
+                                <div className="flex items-start gap-4">
+                                    <div className="flex-1 space-y-0.5">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Valor do Aporte</p>
+                                        <p className="text-2xl font-black text-[#00A3B1] tracking-tight">{invoice?.valor}</p>
+                                    </div>
+                                    <div className="flex-1 space-y-0.5">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data de Envio</p>
+                                        <p className="text-sm font-bold text-slate-600">{invoice?.dataEnvio || 'N/A'}</p>
+                                    </div>
+                                </div>
+                            </div>
 
                             <SelectField
                                 label="Status do Processo"
@@ -109,9 +122,6 @@ const InvoiceApprovalModal: React.FC<InvoiceApprovalModalProps> = ({
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1">
-                                        <button type="button" className="p-1.5 text-slate-300 hover:text-red-500 transition-colors">
-                                            <Trash2 size={16} />
-                                        </button>
                                         <button type="button" className="p-1.5 bg-white shadow-sm border border-slate-100 rounded-lg text-slate-400 hover:text-[#002B49] transition-colors">
                                             <Eye size={16} />
                                         </button>

@@ -4,20 +4,23 @@ import { Search, Loader2, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { Field, FormSection } from '../ui/FormElements';
 import SuccessModal from '../modals/SuccessModal';
+import DataUpdateModal from '../modals/DataUpdateModal';
 import { api, Bank } from '../../../services/api';
 
 interface BankDataTabProps {
     userProfile: any;
     accounts: any[];
     refreshAccounts: () => void;
+    readOnly?: boolean;
 }
 
-const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refreshAccounts }) => {
+const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refreshAccounts, readOnly }) => {
     const [saving, setSaving] = useState(false);
     const [bankList, setBankList] = useState<Bank[]>([]);
     const [filteredBanks, setFilteredBanks] = useState<Bank[]>([]);
     const [showBankList, setShowBankList] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showUpdateModal, setShowUpdateModal] = useState(false);
 
     // Single account state - initialize from first account or defaults
     const [formData, setFormData] = useState({
@@ -138,6 +141,7 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                             onChange={(v) => setFormData({ ...formData, cnpj_favorecido: v })}
                             mask={formData.cnpj_favorecido.length > 14 ? "00.000.000/0000-00" : "000.000.000-00"}
                             required
+                            disabled={readOnly}
                         />
                     </div>
                     <div className="md:col-span-8 relative">
@@ -147,8 +151,9 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                             onChange={handleSearchBank}
                             placeholder="Digite o banco"
                             required
+                            disabled={readOnly}
                         />
-                        {showBankList && filteredBanks.length > 0 && (
+                        {showBankList && filteredBanks.length > 0 && !readOnly && (
                             <div className="absolute top-full left-0 w-full bg-white border border-slate-200 shadow-xl rounded-xl z-20 max-h-60 overflow-y-auto mt-1">
                                 {filteredBanks.map(b => (
                                     <button
@@ -171,6 +176,7 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                             value={formData.agencia}
                             onChange={(v) => setFormData({ ...formData, agencia: v })}
                             required
+                            disabled={readOnly}
                         />
                     </div>
                     <div className="md:col-span-2">
@@ -179,6 +185,7 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                             value={formData.digito_agencia}
                             onChange={(v) => setFormData({ ...formData, digito_agencia: v })}
                             required
+                            disabled={readOnly}
                         />
                     </div>
 
@@ -188,6 +195,7 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                             value={formData.conta}
                             onChange={(v) => setFormData({ ...formData, conta: v })}
                             required
+                            disabled={readOnly}
                         />
                     </div>
                     <div className="md:col-span-2">
@@ -196,6 +204,7 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                             value={formData.digito_conta}
                             onChange={(v) => setFormData({ ...formData, digito_conta: v })}
                             required
+                            disabled={readOnly}
                         />
                     </div>
 
@@ -206,7 +215,8 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                             <select
                                 value={formData.tipo_conta}
                                 onChange={(e) => setFormData({ ...formData, tipo_conta: e.target.value })}
-                                className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]"
+                                disabled={readOnly}
+                                className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] disabled:bg-slate-50 disabled:text-slate-400 appearance-none"
                             >
                                 <option value="Corrente">Corrente</option>
                                 <option value="Poupança">Poupança</option>
@@ -217,15 +227,33 @@ const BankDataTab: React.FC<BankDataTabProps> = ({ userProfile, accounts, refres
                 </div>
             </FormSection>
 
-            <div className="flex justify-end pt-4">
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
-                    <CheckCircle2 size={18} />
-                    {saving ? 'Salvando...' : 'Salvar dados bancários'}
-                </button>
-            </div>
+            {readOnly && (
+                <div className="mt-4">
+                    <button
+                        onClick={() => setShowUpdateModal(true)}
+                        className="text-[#00A3B1] text-xs font-semibold hover:underline"
+                    >
+                        Para atualizar os dados, entre em contato com o administrador.
+                    </button>
+                </div>
+            )}
+
+            {!readOnly && (
+                <div className="flex justify-end pt-4">
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
+                        <CheckCircle2 size={18} />
+                        {saving ? 'Salvando...' : 'Salvar dados bancários'}
+                    </button>
+                </div>
+            )}
+
+            <DataUpdateModal
+                isOpen={showUpdateModal}
+                onClose={() => setShowUpdateModal(false)}
+            />
         </div>
     );
 };

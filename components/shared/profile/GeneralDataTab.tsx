@@ -3,18 +3,21 @@ import React, { useState, useEffect } from 'react';
 import { Mail, Phone, Building2, Search, Loader2, CheckCircle2 } from 'lucide-react';
 import { Field, FormSection } from '../ui/FormElements';
 import SuccessModal from '../modals/SuccessModal';
+import DataUpdateModal from '../modals/DataUpdateModal';
 import { api } from '../../../services/api';
 
 interface GeneralDataTabProps {
     userProfile: any;
     onUpdate: (data: any) => Promise<void>;
     saving: boolean;
+    readOnly?: boolean;
 }
 
-const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, saving }) => {
+const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, saving, readOnly }) => {
     const [formData, setFormData] = useState(userProfile);
     const [searchingCnpj, setSearchingCnpj] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showUpdateModal, setShowUpdateModal] = useState(false);
 
     useEffect(() => { setFormData(userProfile); }, [userProfile]);
 
@@ -85,7 +88,8 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                         onChange={(val) => updateForm('cnpj', val)}
                         mask="00.000.000/0000-00"
                         required
-                        rightIcon={Search}
+                        disabled={readOnly}
+                        rightIcon={readOnly ? null : Search}
                         onRightIconClick={handleSearchCnpj}
                     />
                     <Field
@@ -94,6 +98,7 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                         onChange={(val) => updateForm('data_fundacao', val)}
                         type="date"
                         required
+                        disabled={readOnly}
                     />
                 </div>
 
@@ -102,12 +107,14 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                     value={formData.nome_fantasia}
                     onChange={(val) => updateForm('nome_fantasia', val)}
                     required
+                    disabled={readOnly}
                 />
                 <Field
                     label="Razão social"
                     value={formData.razao_social}
                     onChange={(val) => updateForm('razao_social', val)}
                     required
+                    disabled={readOnly}
                 />
             </FormSection>
 
@@ -118,6 +125,7 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                     onChange={(val) => updateForm('email', val)}
                     icon={Mail}
                     required
+                    disabled={readOnly}
                 />
                 <Field
                     label="Email alternativo"
@@ -125,6 +133,7 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                     onChange={(val) => updateForm('email_alternativo', val)}
                     placeholder="Opcional"
                     icon={Mail}
+                    disabled={readOnly}
                 />
                 <Field
                     label="Celular"
@@ -132,6 +141,7 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                     onChange={(val) => updateForm('celular', val)}
                     mask="(00) 00000-0000"
                     required
+                    disabled={readOnly}
                 />
                 <Field
                     label="Telefone principal"
@@ -139,6 +149,7 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                     onChange={(val) => updateForm('telefone_principal', val)}
                     mask="(00) 0000-0000"
                     placeholder="Opcional"
+                    disabled={readOnly}
                 />
                 <Field
                     label="Telefone secundário"
@@ -146,6 +157,7 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                     onChange={(val) => updateForm('telefone_secundario', val)}
                     mask="(00) 0000-0000"
                     placeholder="Opcional"
+                    disabled={readOnly}
                 />
             </FormSection>
 
@@ -156,24 +168,44 @@ const GeneralDataTab: React.FC<GeneralDataTabProps> = ({ userProfile, onUpdate, 
                     onChange={(val) => updateForm('cpf_representante', val)}
                     mask="000.000.000-00"
                     required
+                    disabled={readOnly}
                 />
                 <Field
                     label="Nome do representante legal da empresa"
                     value={formData.nome_representante}
                     onChange={(val) => updateForm('nome_representante', val)}
                     required
+                    disabled={readOnly}
                 />
             </FormSection>
 
-            <div className="flex justify-end pt-4">
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
-                    <CheckCircle2 size={18} />
-                    {saving ? 'Salvando...' : 'Salvar informações'}
-                </button>
-            </div>
+            {readOnly && (
+                <div className="mt-4">
+                    <button
+                        onClick={() => setShowUpdateModal(true)}
+                        className="text-[#00A3B1] text-xs font-semibold hover:underline"
+                    >
+                        Para atualizar os dados, entre em contato com o administrador.
+                    </button>
+                </div>
+            )}
+
+            {!readOnly && (
+                <div className="flex justify-end pt-4">
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
+                        <CheckCircle2 size={18} />
+                        {saving ? 'Salvando...' : 'Salvar informações'}
+                    </button>
+                </div>
+            )}
+
+            <DataUpdateModal
+                isOpen={showUpdateModal}
+                onClose={() => setShowUpdateModal(false)}
+            />
         </div>
     );
 };

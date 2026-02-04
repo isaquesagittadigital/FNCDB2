@@ -11,9 +11,10 @@ interface AccessDataTabProps {
     userProfile: any;
     onUpdate: (data: any) => Promise<void>;
     saving: boolean;
+    readOnly?: boolean;
 }
 
-const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, saving }) => {
+const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, saving, readOnly }) => {
     // ... existing state items ...
     const [formData, setFormData] = useState({
         nome_fantasia: userProfile.nome_fantasia || userProfile.razao_social || '',
@@ -145,17 +146,17 @@ const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, sa
                         )}
                     </div>
 
-                    <label className="flex-1 cursor-pointer group">
-                        <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />
-                        <div className="border border-[#00A3B1] border-dashed rounded-xl h-[80px] bg-[#F8FAFB] flex flex-col items-center justify-center gap-1 group-hover:bg-[#E6F6F7] transition-all w-full">
+                    <label className={`flex-1 ${readOnly ? 'cursor-default' : 'cursor-pointer'} group`}>
+                        {!readOnly && <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} />}
+                        <div className={`border border-[#00A3B1] border-dashed rounded-xl h-[80px] bg-[#F8FAFB] flex flex-col items-center justify-center gap-1 ${!readOnly ? 'group-hover:bg-[#E6F6F7]' : ''} transition-all w-full`}>
                             <div className="flex items-center gap-2">
                                 <div className="p-1 bg-white border border-slate-200 rounded-lg shadow-sm">
                                     <Upload size={12} className="text-[#002B49]" />
                                 </div>
-                                <span className="text-xs font-bold text-[#00A3B1]">Clique para carregar</span>
-                                <span className="text-xs text-slate-500"> ou arraste e solte</span>
+                                <span className="text-xs font-bold text-[#00A3B1]">{readOnly ? 'Imagem do Perfil' : 'Clique para carregar'}</span>
+                                {!readOnly && <span className="text-xs text-slate-500"> ou arraste e solte</span>}
                             </div>
-                            <span className="text-[10px] text-slate-400">PNG ou JPG (min. 800x400px)</span>
+                            {!readOnly && <span className="text-[10px] text-slate-400">PNG ou JPG (min. 800x400px)</span>}
                         </div>
                     </label>
                 </div>
@@ -168,6 +169,7 @@ const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, sa
                     onChange={(val) => updateForm('nome_fantasia', val)}
                     required
                     className="w-full"
+                    disabled={readOnly}
                 />
 
                 <Field
@@ -177,17 +179,20 @@ const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, sa
                     required
                     className="w-full"
                     icon={Mail}
+                    disabled={readOnly}
                 />
 
-                <div className="flex justify-end pt-2">
-                    <button
-                        onClick={() => userProfile.email !== formData.email ? setModals(prev => ({ ...prev, confirmEmail: true })) : handleInfoSave()}
-                        disabled={saving}
-                        className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
-                        <CheckCircle2 size={18} />
-                        {saving ? 'Salvando...' : 'Salvar informações'}
-                    </button>
-                </div>
+                {!readOnly && (
+                    <div className="flex justify-end pt-2">
+                        <button
+                            onClick={() => userProfile.email !== formData.email ? setModals(prev => ({ ...prev, confirmEmail: true })) : handleInfoSave()}
+                            disabled={saving}
+                            className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
+                            <CheckCircle2 size={18} />
+                            {saving ? 'Salvando...' : 'Salvar informações'}
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="space-y-6 pt-8">
@@ -200,6 +205,7 @@ const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, sa
                     rightIcon={passwords.currentVisible ? EyeOff : Eye}
                     onRightIconClick={() => setPasswords({ ...passwords, currentVisible: !passwords.currentVisible })}
                     required
+                    disabled={readOnly}
                 />
                 <Field
                     label="Nova senha"
@@ -210,6 +216,7 @@ const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, sa
                     onRightIconClick={() => setPasswords({ ...passwords, newVisible: !passwords.newVisible })}
                     placeholder="Mínimo 8 caracteres"
                     required
+                    disabled={readOnly}
                 />
                 <Field
                     label="Confirmar nova senha"
@@ -219,28 +226,33 @@ const AccessDataTab: React.FC<AccessDataTabProps> = ({ userProfile, onUpdate, sa
                     rightIcon={passwords.confirmVisible ? EyeOff : Eye}
                     onRightIconClick={() => setPasswords({ ...passwords, confirmVisible: !passwords.confirmVisible })}
                     required
+                    disabled={readOnly}
                 />
 
-                <div className="space-y-2 pt-2">
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <CheckCircle2 size={14} className={passwords.new.length >= 8 ? "text-[#00A3B1]" : "text-slate-300"} />
-                        <span>Deve conter pelo menos 8 caracteres</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
-                        <CheckCircle2 size={14} className={/[!@#$%^&*(),.?":{}|<>]/.test(passwords.new) ? "text-[#00A3B1]" : "text-slate-300"} />
-                        <span>Deve conter pelo menos 1 caractere especial</span>
-                    </div>
-                </div>
+                {!readOnly && (
+                    <>
+                        <div className="space-y-2 pt-2">
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <CheckCircle2 size={14} className={passwords.new.length >= 8 ? "text-[#00A3B1]" : "text-slate-300"} />
+                                <span>Deve conter pelo menos 8 caracteres</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <CheckCircle2 size={14} className={/[!@#$%^&*(),.?":{}|<>]/.test(passwords.new) ? "text-[#00A3B1]" : "text-slate-300"} />
+                                <span>Deve conter pelo menos 1 caractere especial</span>
+                            </div>
+                        </div>
 
-                <div className="flex justify-end mt-4">
-                    <button
-                        onClick={handlePasswordSave}
-                        disabled={saving || !passwords.new}
-                        className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
-                        <CheckCircle2 size={18} />
-                        {saving ? 'Salvando...' : 'Salvar senha'}
-                    </button>
-                </div>
+                        <div className="flex justify-end mt-4">
+                            <button
+                                onClick={handlePasswordSave}
+                                disabled={saving || !passwords.new}
+                                className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all disabled:opacity-50">
+                                <CheckCircle2 size={18} />
+                                {saving ? 'Salvando...' : 'Salvar senha'}
+                            </button>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

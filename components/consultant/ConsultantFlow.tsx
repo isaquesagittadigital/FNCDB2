@@ -25,7 +25,7 @@ import InvoicesView from './InvoicesView';
 import CalendarView from '../shared/CalendarView';
 import NotificationsView from '../shared/NotificationsView';
 import DocumentsView from '../shared/DocumentsView';
-import ProfileView from '../shared/ProfileView';
+import ProfileView from './ConsultantProfileView';
 
 import { consultantMenu } from './menu';
 
