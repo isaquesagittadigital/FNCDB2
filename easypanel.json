@@ -1,0 +1,83 @@
+{
+    "schema": 1,
+    "name": "FNCD Capital",
+    "description": "Plataforma FNCD Capital - Dashboard de Investimentos",
+    "services": [
+        {
+            "name": "frontend",
+            "type": "app",
+            "app": {
+                "build": {
+                    "type": "dockerfile",
+                    "dockerfilePath": "Dockerfile",
+                    "args": {
+                        "VITE_SUPABASE_URL": "$VITE_SUPABASE_URL",
+                        "VITE_SUPABASE_ANON_KEY": "$VITE_SUPABASE_ANON_KEY",
+                        "VITE_API_URL": "$VITE_API_URL"
+                    }
+                },
+                "domains": [
+                    {
+                        "host": "$APP_DOMAIN"
+                    }
+                ]
+            }
+        },
+        {
+            "name": "backend",
+            "type": "app",
+            "app": {
+                "build": {
+                    "type": "dockerfile",
+                    "dockerfilePath": "server/Dockerfile"
+                },
+                "env": "SUPABASE_URL=$SUPABASE_URL\nSUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY\nPORT=3000",
+                "domains": [
+                    {
+                        "host": "$API_DOMAIN"
+                    }
+                ]
+            }
+        }
+    ],
+    "env": [
+        {
+            "key": "APP_DOMAIN",
+            "label": "Domínio do Frontend",
+            "type": "text",
+            "placeholder": "app.seudominio.com"
+        },
+        {
+            "key": "API_DOMAIN",
+            "label": "Domínio da API (Backend)",
+            "type": "text",
+            "placeholder": "api.seudominio.com"
+        },
+        {
+            "key": "VITE_API_URL",
+            "label": "URL da API (para o Frontend)",
+            "type": "text",
+            "placeholder": "https://api.seudominio.com"
+        },
+        {
+            "key": "VITE_SUPABASE_URL",
+            "label": "Supabase URL (Frontend)",
+            "type": "text"
+        },
+        {
+            "key": "VITE_SUPABASE_ANON_KEY",
+            "label": "Supabase Anon Key",
+            "type": "password"
+        },
+        {
+            "key": "SUPABASE_URL",
+            "label": "Supabase URL (Backend)",
+            "type": "text"
+        },
+        {
+            "key": "SUPABASE_SERVICE_ROLE_KEY",
+            "label": "Supabase Service Role Key",
+            "type": "password"
+        }
+    ]
+}

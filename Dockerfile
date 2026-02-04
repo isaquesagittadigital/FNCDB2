@@ -7,8 +7,16 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Instalar dependências
-# Nota: Se houver package-lock.json, copie-o também e use 'npm ci'
 RUN npm install
+
+# Argumentos de build para o Vite
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_API_URL
+
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+ENV VITE_API_URL=$VITE_API_URL
 
 # Copiar o restante do código fonte
 COPY . .
