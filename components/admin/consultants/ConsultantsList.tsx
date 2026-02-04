@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Edit, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Edit, ChevronLeft, ChevronRight, Trash2, AlertTriangle, X, Users } from 'lucide-react';
 
-interface Client {
+interface Consultant {
     id: string;
     nome_fantasia: string;
     razao_social: string;
@@ -11,32 +11,30 @@ interface Client {
     email: string;
     celular: string;
     status_cliente: string;
-    tipo_cliente: string;
+    client_count: number;
 }
 
-interface ClientsListProps {
+interface ConsultantsListProps {
     onEdit: (id: string) => void;
 }
 
-const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
-    const [clients, setClients] = useState<Client[]>([]);
+const ConsultantsList: React.FC<ConsultantsListProps> = ({ onEdit }) => {
+    const [consultants, setConsultants] = useState<Consultant[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Suggestion State
-    const [nameSuggestions, setNameSuggestions] = useState<Client[]>([]);
-    const [docSuggestions, setDocSuggestions] = useState<Client[]>([]);
+    const [nameSuggestions, setNameSuggestions] = useState<Consultant[]>([]);
+    const [docSuggestions, setDocSuggestions] = useState<Consultant[]>([]);
     const [showNameSuggestions, setShowNameSuggestions] = useState(false);
     const [showDocSuggestions, setShowDocSuggestions] = useState(false);
-    const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false);
 
     // Delete Modal State
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+    const [consultantToDelete, setConsultantToDelete] = useState<Consultant | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
     // Filters
     const [filters, setFilters] = useState({
-        consultant: '',
         name: '',
         document: ''
     });
@@ -45,26 +43,9 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalRecords, setTotalRecords] = useState(0);
-    const LIMIT = 20;
+    const LIMIT = 15;
 
-    // Consultants Data
-    const [consultantsList, setConsultantsList] = useState<{ id: string, nome_fantasia: string }[]>([]);
-
-    const fetchConsultants = async () => {
-        try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants`);
-            if (res.ok) {
-                const json = await res.json();
-                // Handle both old array format and new paginated object format
-                const data = Array.isArray(json) ? json : (json.data || []);
-                setConsultantsList(data);
-            }
-        } catch (error) {
-            console.error('Failed to fetch consultants', error);
-        }
-    };
-
-    const fetchClients = async (overrideFilters?: any) => {
+    const fetchConsultants = async (overrideFilters?: any) => {
         setLoading(true);
         try {
             const currentFilters = overrideFilters || filters;
@@ -72,19 +53,18 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
                 page: page.toString(),
                 limit: LIMIT.toString(),
                 ...(currentFilters.name && { name: currentFilters.name }),
-                ...(currentFilters.document && { document: currentFilters.document }),
-                ...(currentFilters.consultant && { consultant_id: currentFilters.consultant })
+                ...(currentFilters.document && { document: currentFilters.document })
             });
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?${queryParams}`);
+            const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants?${queryParams}`);
             if (response.ok) {
                 const { data, total } = await response.json();
-                setClients(data);
+                setConsultants(data);
                 setTotalRecords(total);
                 setTotalPages(Math.ceil(total / LIMIT));
             }
         } catch (error) {
-            console.error('Failed to fetch clients', error);
+            console.error('Failed to fetch consultants', error);
         } finally {
             setLoading(false);
         }
@@ -119,9 +99,8 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
     }, [filters.document]);
 
     const searchNameSuggestions = async (name: string) => {
-        setIsSearchingSuggestions(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?name=${name}&limit=5`);
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants?name=${name}&limit=5`);
             if (res.ok) {
                 const { data } = await res.json();
                 setNameSuggestions(data);
@@ -129,15 +108,12 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
             }
         } catch (error) {
             console.error('Error fetching name suggestions', error);
-        } finally {
-            setIsSearchingSuggestions(false);
         }
     };
 
     const searchDocSuggestions = async (doc: string) => {
-        setIsSearchingSuggestions(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?document=${doc}&limit=5`);
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants?document=${doc}&limit=5`);
             if (res.ok) {
                 const { data } = await res.json();
                 setDocSuggestions(data);
@@ -145,14 +121,11 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
             }
         } catch (error) {
             console.error('Error fetching doc suggestions', error);
-        } finally {
-            setIsSearchingSuggestions(false);
         }
     };
 
     // Initial fetch and on page change
     useEffect(() => {
-        fetchClients();
         fetchConsultants();
     }, [page]);
 
@@ -162,239 +135,229 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
 
         if (field === 'name' && value === '') setShowNameSuggestions(false);
         if (field === 'document' && value === '') setShowDocSuggestions(false);
-
-        // If it's the consultant select, fetch immediately
-        if (field === 'consultant') {
-            setPage(1);
-            fetchClients(newFilters);
-        }
     };
 
-    const selectNameSuggestion = (client: Client) => {
-        const newName = client.nome_fantasia || client.razao_social;
+    const selectNameSuggestion = (c: Consultant) => {
+        const newName = c.nome_fantasia || c.razao_social;
         const newFilters = { ...filters, name: newName };
         setFilters(newFilters);
         setShowNameSuggestions(false);
         setPage(1);
-        fetchClients(newFilters);
+        fetchConsultants(newFilters);
     };
 
-    const selectDocSuggestion = (client: Client) => {
-        const newDoc = client.cpf || client.cnpj;
+    const selectDocSuggestion = (c: Consultant) => {
+        const newDoc = c.cpf || c.cnpj;
         const newFilters = { ...filters, document: newDoc };
         setFilters(newFilters);
         setShowDocSuggestions(false);
         setPage(1);
-        fetchClients(newFilters);
+        fetchConsultants(newFilters);
     };
 
     const resetFilters = () => {
-        const emptyFilters = { consultant: '', name: '', document: '' };
+        const emptyFilters = { name: '', document: '' };
         setFilters(emptyFilters);
         setPage(1);
-        fetchClients(emptyFilters);
+        fetchConsultants(emptyFilters);
     };
 
-    const openDeleteModal = (client: Client) => {
-        setClientToDelete(client);
+    const openDeleteModal = (c: Consultant) => {
+        setConsultantToDelete(c);
         setIsDeleteModalOpen(true);
     };
 
     const closeDeleteModal = () => {
         setIsDeleteModalOpen(false);
-        setClientToDelete(null);
+        setConsultantToDelete(null);
     };
 
     const handleDeleteConfirm = async () => {
-        if (!clientToDelete) return;
+        if (!consultantToDelete) return;
 
         setIsDeleting(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/users/${clientToDelete.id}`, {
+            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants/${consultantToDelete.id}`, {
                 method: 'DELETE'
             });
 
             if (res.ok) {
-                fetchClients();
+                fetchConsultants();
                 closeDeleteModal();
             } else {
                 const error = await res.json();
-                alert(error.error || 'Erro ao inativar cliente');
+                alert(error.error || 'Erro ao inativar consultor');
             }
         } catch (err) {
             console.error('Delete error:', err);
-            alert('Ocorreu um erro ao tentar inativar o cliente.');
+            alert('Ocorreu um erro ao tentar inativar o consultor.');
         } finally {
             setIsDeleting(false);
         }
     };
 
-    const isFilterActive = filters.consultant || filters.name || filters.document;
+    const isFilterActive = filters.name || filters.document;
 
     return (
         <div className="space-y-6">
+            {/* Search Section */}
             <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm relative overflow-visible">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-base font-bold text-[#002B49]">Pesquisar cliente</h2>
-                    {isFilterActive && (
-                        <button
-                            onClick={resetFilters}
-                            className="text-xs font-bold text-red-500 hover:text-red-600 flex items-center gap-1 transition-colors"
-                        >
-                            <X size={14} />
-                            Resetar filtros
-                        </button>
-                    )}
-                </div>
+                <h2 className="text-sm font-semibold text-slate-500 mb-6 uppercase tracking-wider">Pesquisar consultor</h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-                    <div className="space-y-1.5">
-                        <label className="text-sm font-semibold text-slate-500">Consultor</label>
-                        <select
-                            value={filters.consultant}
-                            onChange={(e) => handleFilterChange('consultant', e.target.value)}
-                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1] bg-white text-slate-600"
-                        >
-                            <option value="">Todos</option>
-                            {consultantsList.map(c => (
-                                <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="space-y-1.5 relative">
-                        <label className="text-sm font-semibold text-slate-500">Nome do cliente</label>
+                <div className="flex flex-col md:flex-row gap-6 items-end">
+                    <div className="flex-1 space-y-2 relative">
+                        <label className="text-sm font-bold text-[#002B49]">Nome do consultor</label>
                         <input
                             type="text"
                             placeholder="Digite o nome"
                             value={filters.name}
                             onChange={(e) => handleFilterChange('name', e.target.value)}
                             onFocus={() => filters.name.length >= 2 && setShowNameSuggestions(true)}
-                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1]"
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] text-sm font-medium"
                         />
                         {showNameSuggestions && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                                {nameSuggestions.map(client => (
+                                {nameSuggestions.map(c => (
                                     <button
-                                        key={client.id}
-                                        onClick={() => selectNameSuggestion(client)}
+                                        key={c.id}
+                                        onClick={() => selectNameSuggestion(c)}
                                         className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex flex-col"
                                     >
-                                        <span className="font-bold text-[#002B49] text-sm">{client.nome_fantasia || client.razao_social}</span>
-                                        <span className="text-xs text-slate-500 font-mono">{client.cpf || client.cnpj}</span>
+                                        <span className="font-bold text-[#002B49] text-sm">{c.nome_fantasia || c.razao_social}</span>
+                                        <span className="text-xs text-slate-400">{c.email}</span>
                                     </button>
                                 ))}
                             </div>
-                        )}
-                        {showNameSuggestions && (
-                            <div className="fixed inset-0 z-40" onClick={() => setShowNameSuggestions(false)}></div>
                         )}
                     </div>
 
-                    <div className="space-y-1.5 relative">
-                        <label className="text-sm font-semibold text-slate-500">Documento</label>
+                    <div className="flex-1 space-y-2 relative">
+                        <label className="text-sm font-bold text-[#002B49]">Documento</label>
                         <input
                             type="text"
-                            placeholder="CPF / CNPJ"
+                            placeholder="CPF ou CNPJ"
                             value={filters.document}
                             onChange={(e) => handleFilterChange('document', e.target.value)}
                             onFocus={() => filters.document.length >= 3 && setShowDocSuggestions(true)}
-                            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1]"
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] text-sm font-medium"
                         />
                         {showDocSuggestions && (
                             <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                                {docSuggestions.map(client => (
+                                {docSuggestions.map(c => (
                                     <button
-                                        key={client.id}
-                                        onClick={() => selectDocSuggestion(client)}
+                                        key={c.id}
+                                        onClick={() => selectDocSuggestion(c)}
                                         className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors flex flex-col"
                                     >
-                                        <span className="font-bold text-[#002B49] text-sm">{client.nome_fantasia || client.razao_social}</span>
-                                        <span className="text-xs text-slate-500 font-mono">{client.cpf || client.cnpj}</span>
+                                        <span className="font-bold text-[#002B49] text-sm">{c.nome_fantasia || c.razao_social}</span>
+                                        <span className="text-xs text-slate-400 font-mono">{c.cpf || c.cnpj}</span>
                                     </button>
                                 ))}
                             </div>
                         )}
-                        {showDocSuggestions && (
-                            <div className="fixed inset-0 z-40" onClick={() => setShowDocSuggestions(false)}></div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                setPage(1);
+                                fetchConsultants();
+                            }}
+                            className="bg-white border border-slate-200 text-[#002B49] px-6 py-3 rounded-xl font-bold transition-all hover:bg-slate-50 flex items-center gap-2 active:scale-95 shadow-sm"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-400"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                            Pesquisar
+                        </button>
+                        {isFilterActive && (
+                            <button
+                                onClick={resetFilters}
+                                className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                                title="Limpar Filtros"
+                            >
+                                <X size={20} />
+                            </button>
                         )}
                     </div>
                 </div>
             </div>
 
-            {/* List Table */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Table Section */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
-                            <tr>
-                                <th className="px-6 py-3 font-medium">Nome / Razão Social</th>
-                                <th className="px-6 py-3 font-medium">Documento</th>
-                                <th className="px-6 py-3 font-medium">Email</th>
-                                <th className="px-6 py-3 font-medium">Telefone</th>
-                                <th className="px-6 py-3 font-medium text-center">Tipo</th>
-                                <th className="px-6 py-3 font-medium text-center">Status</th>
-                                <th className="px-6 py-3 font-medium text-right">Ações</th>
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-slate-50/50 text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">
+                                <th className="px-6 py-5">Nome</th>
+                                <th className="px-6 py-5 flex items-center gap-1 cursor-pointer hover:text-slate-700">
+                                    Email
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></svg>
+                                </th>
+                                <th className="px-6 py-5">Documento</th>
+                                <th className="px-6 py-5 text-center">Clientes</th>
+                                <th className="px-6 py-5 text-center flex items-center justify-center gap-1 cursor-pointer hover:text-slate-700">
+                                    Status
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5" /><path d="m7 9 5-5 5 5" /></svg>
+                                </th>
+                                <th className="px-6 py-5"></th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {loading ? (
                                 Array.from({ length: 5 }).map((_, i) => (
                                     <tr key={i} className="animate-pulse">
-                                        <td colSpan={7} className="px-6 py-4">
+                                        <td colSpan={6} className="px-6 py-6">
                                             <div className="h-4 bg-slate-100 rounded w-full"></div>
                                         </td>
                                     </tr>
                                 ))
-                            ) : clients.length === 0 ? (
+                            ) : consultants.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                                        Nenhum cliente encontrado.
+                                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
+                                        Nenhum consultor encontrado.
                                     </td>
                                 </tr>
                             ) : (
-                                clients.map((client) => (
-                                    <tr key={client.id} className="hover:bg-slate-50/50 transition-colors group">
-                                        <td className="px-6 py-4 font-medium text-[#002B49]">
-                                            {client.nome_fantasia || client.razao_social || '---'}
+                                consultants.map((c) => (
+                                    <tr key={c.id} className="hover:bg-slate-50/50 transition-colors group">
+                                        <td className="px-6 py-5 font-medium text-[#002B49] text-sm">
+                                            {c.nome_fantasia || c.razao_social}
                                         </td>
-                                        <td className="px-6 py-4 font-mono text-slate-500 text-xs">
-                                            {client.cpf || client.cnpj || '---'}
+                                        <td className="px-6 py-5 text-slate-500 text-sm">
+                                            {c.email}
                                         </td>
-                                        <td className="px-6 py-4 text-slate-600">
-                                            {client.email || '---'}
+                                        <td className="px-6 py-5 text-slate-500 font-mono text-sm whitespace-nowrap">
+                                            {c.cnpj || c.cpf}
                                         </td>
-                                        <td className="px-6 py-4 text-slate-500 text-xs">
-                                            {client.celular || '---'}
+                                        <td className="px-6 py-5 text-center text-slate-700 font-bold text-sm">
+                                            {c.client_count || 0}
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs border border-slate-200">
-                                                {client.tipo_cliente === 'Pessoa Jurídica' ? 'PJ' : 'PF'}
+                                        <td className="px-6 py-5 text-center">
+                                            <span className="px-4 py-1.5 bg-[#EEFDF5] text-[#00944F] rounded-full text-xs font-bold border border-[#D1F9E3]">
+                                                Ativo
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-center">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold border ${client.status_cliente === 'Apto' || client.status_cliente === 'Ativo'
-                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                                : 'bg-yellow-50 text-yellow-700 border-yellow-100'
-                                                }`}>
-                                                {client.status_cliente || 'Pendente'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2 transition-opacity">
+                                        <td className="px-6 py-5">
+                                            <div className="flex items-center justify-end gap-2">
                                                 <button
-                                                    onClick={() => onEdit(client.id)}
-                                                    className="p-1.5 hover:bg-slate-100 text-slate-400 hover:text-[#00A3B1] rounded transition-colors"
-                                                    title="Editar"
-                                                >
-                                                    <Edit size={16} />
-                                                </button>
-                                                <button
-                                                    onClick={() => openDeleteModal(client)}
-                                                    className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded transition-colors"
+                                                    onClick={() => openDeleteModal(c)}
+                                                    className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                                     title="Inativar"
                                                 >
-                                                    <Trash2 size={16} />
+                                                    <Trash2 size={18} strokeWidth={1.5} />
+                                                </button>
+                                                <button
+                                                    onClick={() => onEdit(c.id)}
+                                                    className="p-2 text-slate-400 hover:text-[#00A3B1] hover:bg-cyan-50 rounded-lg transition-all"
+                                                    title="Editar"
+                                                >
+                                                    <Edit size={18} strokeWidth={1.5} />
+                                                </button>
+                                                <button
+                                                    onClick={() => alert('Verificação em desenvolvimento')}
+                                                    className="p-2 text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 rounded-lg transition-all"
+                                                    title="Verificar"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></svg>
                                                 </button>
                                             </div>
                                         </td>
@@ -437,7 +400,6 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
             {isDeleteModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                        {/* Modal Header */}
                         <div className="flex items-center justify-between p-6 border-b border-slate-100">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-red-50 text-red-500 rounded-lg">
@@ -453,10 +415,9 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
                             </button>
                         </div>
 
-                        {/* Modal Body */}
                         <div className="p-6">
                             <p className="text-slate-600 mb-6">
-                                Tem certeza que deseja inativar o cliente <span className="font-bold text-[#002B49]">{clientToDelete?.nome_fantasia || clientToDelete?.razao_social}</span>?
+                                Tem certeza que deseja inativar o consultor <span className="font-bold text-[#002B49]">{consultantToDelete?.nome_fantasia || consultantToDelete?.razao_social}</span>?
                                 <br /> Esta ação impossibilitará o acesso do usuário ao sistema.
                             </p>
 
@@ -483,4 +444,4 @@ const ClientsList: React.FC<ClientsListProps> = ({ onEdit }) => {
     );
 };
 
-export default ClientsList;
+export default ConsultantsList;

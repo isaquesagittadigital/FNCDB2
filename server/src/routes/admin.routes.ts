@@ -51,34 +51,34 @@ export async function adminRoutes(server: FastifyInstance) {
                 query = supabase
                     .from('usuarios')
                     .select('*, meu_consultor!inner(consultor_id)', { count: 'exact' })
-                    .eq('tipo_user', 'Cliente')
                     .eq('meu_consultor.consultor_id', consultant_id);
             } else {
                 query = supabase
                     .from('usuarios')
-                    .select('*', { count: 'exact' })
-                    .eq('tipo_user', 'Cliente');
+                    .select('*', { count: 'exact' });
             }
 
-            query = query
-                .range(from, to)
-                .order('created_at', { ascending: false });
+            // Base filters: Only clients and not deleted
+            query = query.eq('tipo_user', 'Cliente')
+                .or('deletado.is.null,deletado.eq.false');
 
             // Apply filters
             if (name) {
-                query = query.ilike('nome_fantasia', `%${name}%`);
+                query = query.or(`nome_fantasia.ilike.%${name}%,razao_social.ilike.%${name}%`);
             }
 
             if (document) {
                 const cleanDoc = document.replace(/\D/g, '');
                 if (cleanDoc) {
-                    query = query.or(`cpf.eq.${document},cnpj.eq.${document},cpf.ilike.%${cleanDoc}%,cnpj.ilike.%${cleanDoc}%`);
+                    query = query.or(`cpf.ilike.%${cleanDoc}%,cnpj.ilike.%${cleanDoc}%,cpf.eq.${document},cnpj.eq.${document}`);
                 } else {
                     query = query.or(`cpf.eq.${document},cnpj.eq.${document}`);
                 }
             }
 
-            const { data, count, error } = await query;
+            const { data, count, error } = await query
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             if (error) throw error;
 
@@ -346,27 +346,50 @@ export async function adminRoutes(server: FastifyInstance) {
     });
 
     // Consultants Management
-    server.get('/consultants', async (_request, reply) => {
+    server.get('/consultants', async (request: any, reply) => {
+        const { page = 1, limit = 20, name = '', document = '' } = request.query;
+        const from = (page - 1) * limit;
+        const to = from + limit - 1;
+
         try {
-            const { data: consultants, error } = await supabase
+            let query = supabase
                 .from('usuarios')
-                .select('*')
+                .select('*', { count: 'exact' })
                 .eq('tipo_user', 'Consultor')
-                .order('created_at', { ascending: false });
+                .or('deletado.is.null,deletado.eq.false');
+
+            // Apply filters
+            if (name) {
+                query = query.or(`nome_fantasia.ilike.%${name}%,razao_social.ilike.%${name}%`);
+            }
+
+            if (document) {
+                const cleanDoc = document.replace(/\D/g, '');
+                if (cleanDoc) {
+                    query = query.or(`cpf.ilike.%${cleanDoc}%,cnpj.ilike.%${cleanDoc}%,cpf.eq.${document},cnpj.eq.${document}`);
+                } else {
+                    query = query.or(`cpf.eq.${document},cnpj.eq.${document}`);
+                }
+            }
+
+            const { data: consultants, count, error } = await query
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             if (error) throw error;
 
             // Fetch client counts
             const consultantsWithCounts = await Promise.all(consultants.map(async (c: any) => {
-                const { count } = await supabase
+                const { count: clientCount } = await supabase
                     .from('meu_consultor')
                     .select('*', { count: 'exact', head: true })
                     .eq('consultor_id', c.id);
-                return { ...c, client_count: count || 0 };
+                return { ...c, client_count: clientCount || 0 };
             }));
 
-            return reply.send(consultantsWithCounts);
+            return reply.send({ data: consultantsWithCounts, total: count, page: Number(page), limit: Number(limit) });
         } catch (err: any) {
+            server.log.error(err);
             return reply.status(500).send({ error: err.message });
         }
     });
@@ -374,34 +397,16 @@ export async function adminRoutes(server: FastifyInstance) {
     server.post('/consultants', async (request: any, reply) => {
         const body = request.body;
         try {
-            // Basic validation
-            if (!body.email || !body.nome_fantasia) { // Using nome_fantasia as main name
+            if (!body.email || !body.nome_fantasia) {
                 return reply.status(400).send({ error: 'Nome e Email são obrigatórios.' });
             }
-
-            // Create auth user (mock or real if admin has permissions) - For now creating directly in public.usuarios
-            // In a real scenario, we might need to create auth.users first, but supabase client-side usually handles that.
-            // If we are strictly admin-side without user interaction, we might just insert into usuarios table and let a trigger handle auth, 
-            // OR just insert data and assume an invite flow.
-            // For this project context, sticking to simple insertion into 'usuarios' assuming the ID is auto-gen or we treat it as metadata.
-
-            // Wait, 'usuarios' usually references auth.users. 
-            // If we insert here without auth.users, it might fail FK constraints if they exist.
-            // Let's assume for now we just insert into 'usuarios' directly if possible, or use a function.
-            // Based on previous Client creation, it seems we might be creating users via Supabase Admin Auth API in a real backend, 
-            // but here we might just be inserting into the public table if RLS allows or if it's a separate entity.
-            // Re-checking create-admin.ts... it creates auth user.
-            // Let's assume for this MVP we just insert into `usuarios` and let the trigger/flow handle it, 
-            // OR we just focus on the data layer. 
-            // NOTE: The `ClientForm` uses `api/admin/clients` which does a simple insert/update. 
-            // I'll replicate that pattern.
 
             const { data, error } = await supabase
                 .from('usuarios')
                 .insert({
                     ...body,
                     tipo_user: 'Consultor',
-                    status_cliente: 'Ativo' // Default status
+                    status_cliente: 'Ativo'
                 })
                 .select()
                 .single();
@@ -417,7 +422,9 @@ export async function adminRoutes(server: FastifyInstance) {
         const { id } = request.params;
         const body = request.body;
         try {
-            delete body.id; // protect ID
+            delete body.id;
+            delete body.tipo_user; // Prevent changing user type
+
             const { data, error } = await supabase
                 .from('usuarios')
                 .update(body)
@@ -437,11 +444,14 @@ export async function adminRoutes(server: FastifyInstance) {
         try {
             const { error } = await supabase
                 .from('usuarios')
-                .delete()
+                .update({
+                    deletado: true,
+                    status_cliente: 'Inativo'
+                })
                 .eq('id', id);
 
             if (error) throw error;
-            return reply.send({ message: 'Consultor excluído com sucesso' });
+            return reply.send({ message: 'Consultor inativado com sucesso' });
         } catch (err: any) {
             return reply.status(500).send({ error: err.message });
         }

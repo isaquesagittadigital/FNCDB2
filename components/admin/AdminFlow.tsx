@@ -24,7 +24,8 @@ import ApprovalList from './approval/ApprovalList';
 import ApprovalDetails from './approval/ApprovalDetails';
 import { ApprovalProcess } from './approval/types';
 import ClientsView from './clients/ClientsView';
-
+import InvoicesView from './invoices/InvoicesView';
+import EmptyState from '../shared/ui/EmptyState';
 import { adminMenu } from './menu';
 
 // Mock Data
@@ -178,34 +179,42 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
             case 'contracts':
                 return <ContractsView />;
             case 'invoices':
+                return <InvoicesView />;
             case 'income_reports':
                 return (
                     <div className="space-y-6">
-                        <h1 className="text-3xl font-bold text-[#002B49]">Cadastros / {activeTab}</h1>
-                        <p className="text-slate-400">Gerenciamento de {activeTab}.</p>
-                    </div>
-                );
-            case 'reports':
-                return (
-                    <div className="space-y-6">
-                        <h1 className="text-3xl font-bold text-[#002B49]">Relatórios</h1>
-                        <p className="text-slate-400">Visualização de relatórios.</p>
+                        <h1 className="text-2xl font-bold text-[#002B49]">Informe de rendimentos</h1>
+                        <EmptyState
+                            title="Em desenvolvimento"
+                            description="O fluxo de informes de rendimentos está sendo preparado e estará disponível em breve."
+                        />
                     </div>
                 );
             case 'detailed_portfolio':
             case 'portfolio_report':
             case 'monthly_commission':
+                const reportTitles: any = {
+                    'detailed_portfolio': 'Carteira detalhada',
+                    'portfolio_report': 'Relatório: Carteiras',
+                    'monthly_commission': 'Comissão mensal'
+                };
                 return (
                     <div className="space-y-6">
-                        <h1 className="text-3xl font-bold text-[#002B49]">Relatórios / {activeTab}</h1>
-                        <p className="text-slate-400">Relatório de {activeTab}.</p>
+                        <h1 className="text-2xl font-bold text-[#002B49]">{reportTitles[activeTab]}</h1>
+                        <EmptyState
+                            title="Seção em desenvolvimento"
+                            description={`O relatório de ${reportTitles[activeTab].toLowerCase()} está em fase de implementação.`}
+                        />
                     </div>
                 );
             case 'payments':
                 return (
                     <div className="space-y-6">
-                        <h1 className="text-3xl font-bold text-[#002B49]">Pagamentos</h1>
-                        <p className="text-slate-400">Gerenciamento de pagamentos.</p>
+                        <h1 className="text-2xl font-bold text-[#002B49]">Pagamentos</h1>
+                        <EmptyState
+                            title="Módulo de Pagamentos"
+                            description="A gestão de pagamentos está em fase de desenvolvimento e será liberada em breve."
+                        />
                     </div>
                 );
             case 'administrators':

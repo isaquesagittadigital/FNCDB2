@@ -16,25 +16,34 @@ const ProfileView: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchProfile();
-    fetchAccounts();
+    loadData();
   }, []);
 
-  const fetchProfile = async () => {
+  const loadData = async () => {
     try {
+      setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from('usuarios')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+      const [profileRes, accountsRes] = await Promise.all([
+        supabase
+          .from('usuarios')
+          .select('*')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('contas_bancarias')
+          .select('*')
+          .eq('user_id', user.id)
+      ]);
 
-      if (error) throw error;
-      setUserProfile(data);
+      if (profileRes.error) throw profileRes.error;
+      if (accountsRes.error) throw accountsRes.error;
+
+      setUserProfile(profileRes.data);
+      setAccounts(accountsRes.data || []);
     } catch (error) {
-      console.error('Erro ao buscar perfil:', error);
+      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
@@ -75,22 +84,14 @@ const ProfileView: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-full">
-        <Loader2 className="animate-spin text-[#00A3B1]" size={32} />
-      </div>
-    );
-  }
-
-  if (!userProfile) return <div>Erro ao carregar perfil.</div>;
-
   const tabs = [
     { id: 'access', label: 'Dados de acesso' },
     { id: 'general', label: 'Dados gerais' },
     { id: 'address', label: 'Endereço' },
     { id: 'bank', label: 'Dados bancários' }
   ];
+
+  if (!userProfile && !loading) return <div>Erro ao carregar perfil.</div>;
 
   return (
     <div className="p-4 max-w-full mx-auto">
@@ -117,34 +118,42 @@ const ProfileView: React.FC = () => {
         </div>
       </header>
 
-      <main className="bg-white rounded-[2rem] p-10 shadow-sm border border-slate-100 min-h-[600px]">
-        {activeTab === 'access' && (
-          <AccessDataTab
-            userProfile={userProfile}
-            onUpdate={handleUpdateProfile}
-            saving={saving}
-          />
-        )}
-        {activeTab === 'general' && (
-          <GeneralDataTab
-            userProfile={userProfile}
-            onUpdate={handleUpdateProfile}
-            saving={saving}
-          />
-        )}
-        {activeTab === 'address' && (
-          <AddressTab
-            userProfile={userProfile}
-            onUpdate={handleUpdateProfile}
-            saving={saving}
-          />
-        )}
-        {activeTab === 'bank' && (
-          <BankDataTab
-            userProfile={userProfile}
-            accounts={accounts}
-            refreshAccounts={fetchAccounts}
-          />
+      <main className="bg-white rounded-[2rem] p-10 shadow-sm border border-slate-100 min-h-[600px] flex flex-col">
+        {loading ? (
+          <div className="flex-1 flex justify-center items-center">
+            <Loader2 className="animate-spin text-[#00A3B1]" size={32} />
+          </div>
+        ) : (
+          <>
+            {activeTab === 'access' && (
+              <AccessDataTab
+                userProfile={userProfile}
+                onUpdate={handleUpdateProfile}
+                saving={saving}
+              />
+            )}
+            {activeTab === 'general' && (
+              <GeneralDataTab
+                userProfile={userProfile}
+                onUpdate={handleUpdateProfile}
+                saving={saving}
+              />
+            )}
+            {activeTab === 'address' && (
+              <AddressTab
+                userProfile={userProfile}
+                onUpdate={handleUpdateProfile}
+                saving={saving}
+              />
+            )}
+            {activeTab === 'bank' && (
+              <BankDataTab
+                userProfile={userProfile}
+                accounts={accounts}
+                refreshAccounts={fetchAccounts}
+              />
+            )}
+          </>
         )}
       </main>
     </div>

@@ -41,7 +41,10 @@ const ClientGeneralForm: React.FC<ClientGeneralFormProps> = ({ initialData, onSu
         // Fetch consultants
         fetch(`${import.meta.env.VITE_API_URL}/admin/consultants`)
             .then(res => res.json())
-            .then(data => setConsultants(data || []))
+            .then(json => {
+                const data = Array.isArray(json) ? json : (json.data || []);
+                setConsultants(data);
+            })
             .catch(err => console.error("Failed to fetch consultants", err));
     }, []);
 
