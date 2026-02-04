@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import ClientsList from './ClientsList';
 import ClientForm from './ClientForm';
-import { UserPlus, Home } from 'lucide-react';
+import { UserPlus, Home, ChevronRight } from 'lucide-react';
 
 const ClientsView: React.FC = () => {
     const [viewMode, setViewMode] = useState<'list' | 'create' | 'edit'>('list');
@@ -29,14 +29,14 @@ const ClientsView: React.FC = () => {
                 <>
                     {/* Header with Breadcrumb and Action */}
                     <div className="flex flex-col gap-4">
-                        <div className="flex items-center gap-2 text-sm text-slate-400">
-                            <Home size={16} />
-                            <span>›</span>
-                            <span className="font-medium text-slate-600">Clientes</span>
+                        <div className="flex items-center gap-2 text-base font-medium text-slate-500">
+                            <Home size={18} className="text-slate-400" />
+                            <ChevronRight size={18} className="text-slate-300" />
+                            <span className="text-[#002B49] font-semibold">Clientes</span>
                         </div>
 
                         <div className="flex items-center justify-between">
-                            <h1 className="text-2xl font-bold text-[#002B49]">Clientes</h1>
+                            <h1 className="text-xl font-bold text-[#002B49]">Clientes</h1>
 
                             <button
                                 onClick={handleCreate}

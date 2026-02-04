@@ -283,6 +283,28 @@ export async function adminRoutes(server: FastifyInstance) {
         }
     });
 
+    // 7b. Update Bank Account
+    server.put('/clients/:id/bank-accounts/:accountId', async (request: any, reply) => {
+        const { accountId } = request.params;
+        const body = request.body;
+        try {
+            delete body.id;
+            delete body.user_id; // prevent moving account to another user
+
+            const { data, error } = await supabase
+                .from('contas_bancarias')
+                .update(body)
+                .eq('id', accountId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return reply.send(data);
+        } catch (err: any) {
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
 
     // Contracts Management
     // 8. list contracts

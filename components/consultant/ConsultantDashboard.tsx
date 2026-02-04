@@ -16,7 +16,11 @@ import { LogoIcon } from '../shared/ui/Logo';
 import ContractModal from '../shared/modals/ContractModal';
 import PortfolioInfoModal from '../shared/modals/PortfolioInfoModal';
 
-const ConsultantDashboard: React.FC = () => {
+interface ConsultantDashboardProps {
+  userProfile?: any;
+}
+
+const ConsultantDashboard: React.FC<ConsultantDashboardProps> = ({ userProfile }) => {
   const [showValues, setShowValues] = useState(false);
   const [selectedContract, setSelectedContract] = useState<any>(null);
   const [showPortfolioInfo, setShowPortfolioInfo] = useState(false);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Save, MapPin, Search, CheckCircle, ChevronRight } from 'lucide-react';
-import { IMaskInput } from 'react-imask';
+import { Field, FormSection } from '../../../shared/ui/FormElements';
+import { Save, CheckCircle, Search } from 'lucide-react';
 
 interface ClientAddressFormProps {
     initialData?: any;
@@ -12,9 +12,9 @@ interface ClientAddressFormProps {
 const ClientAddressForm: React.FC<ClientAddressFormProps> = ({ initialData, onSubmit, loading, wizardMode = false }) => {
     const [formData, setFormData] = useState({
         cep: '',
-        logradouro: '',
-        numero: '',
-        complemento: '',
+        logradouro_end: '',
+        numero_end: '',
+        complemento_end: '',
         bairro: '',
         cidade: '',
         uf: ''
@@ -31,17 +31,8 @@ const ClientAddressForm: React.FC<ClientAddressFormProps> = ({ initialData, onSu
         }
     }, [initialData]);
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleMaskChange = (name: string, value: string) => {
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleSearchCep = async () => {
-        const cleanCep = formData.cep.replace(/\D/g, '');
+    const searchCep = async (cepInfo: string) => {
+        const cleanCep = cepInfo.replace(/\D/g, '');
         if (cleanCep.length !== 8) return;
 
         setSearchingCep(true);
@@ -52,21 +43,32 @@ const ClientAddressForm: React.FC<ClientAddressFormProps> = ({ initialData, onSu
             if (!data.erro) {
                 setFormData(prev => ({
                     ...prev,
-                    logradouro: data.logradouro,
+                    logradouro_end: data.logradouro,
                     bairro: data.bairro,
                     cidade: data.localidade,
-                    uf: data.uf
+                    uf: data.uf,
+                    complemento_end: data.complemento || prev.complemento_end
                 }));
-            } else {
-                alert('CEP não encontrado!');
             }
         } catch (error) {
             console.error('Erro ao buscar CEP:', error);
-            alert('Erro ao buscar CEP. Tente novamente.');
         } finally {
             setSearchingCep(false);
         }
     };
+
+    const updateForm = (key: string, val: any) => {
+        setFormData((prev: any) => ({ ...prev, [key]: val }));
+
+        if (key === 'cep') {
+            const clean = val.replace(/\D/g, '');
+            if (clean.length === 8) {
+                searchCep(clean);
+            }
+        }
+    };
+
+
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -74,103 +76,77 @@ const ClientAddressForm: React.FC<ClientAddressFormProps> = ({ initialData, onSu
     };
 
     return (
+
         <form onSubmit={handleSubmit} className="space-y-8 animate-in fade-in duration-500">
-            <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-6">
-                    <div className="p-2 bg-[#E6F6F7] rounded-lg">
-                        <MapPin className="text-[#00A3B1]" size={20} />
+            <div className="space-y-6">
+                <div>
+                    <h3 className="text-sm font-bold text-[#002B49] uppercase tracking-wider mb-4">Endereço</h3>
+                </div>
+
+                {/* Linha 1: CEP */}
+                <div className="w-1/3 min-w-[200px]">
+                    <Field
+                        label="CEP"
+                        value={formData.cep}
+                        onChange={(val) => updateForm('cep', val)}
+                        mask="00000-000"
+                        required
+                        placeholder="Insira o CEP"
+                    />
+                </div>
+
+                {/* Linha 2 com Grid */}
+                <div className="grid grid-cols-12 gap-4">
+                    <div className="col-span-12 md:col-span-4">
+                        <Field
+                            label="Endereço"
+                            value={formData.logradouro_end}
+                            onChange={(val) => updateForm('logradouro_end', val)}
+                            required
+                        />
                     </div>
-                    <div>
-                        <h3 className="text-sm font-bold text-[#002B49] uppercase tracking-wider">Endereço</h3>
-                        <p className="text-xs text-slate-500">Localização do cliente</p>
+                    <div className="col-span-12 md:col-span-2">
+                        <Field
+                            label="Número"
+                            value={formData.numero_end}
+                            onChange={(val) => updateForm('numero_end', val)}
+                            required
+                            placeholder="Informe o número"
+                        />
+                    </div>
+                    <div className="col-span-12 md:col-span-3">
+                        <Field
+                            label="Complemento (opcional)"
+                            value={formData.complemento_end}
+                            onChange={(val) => updateForm('complemento_end', val)}
+                            placeholder="Ex.: Apt. 10"
+                        />
+                    </div>
+                    <div className="col-span-12 md:col-span-3">
+                        <Field
+                            label="Bairro"
+                            value={formData.bairro}
+                            onChange={(val) => updateForm('bairro', val)}
+                            required
+                        />
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-slate-500">CEP <span className="text-red-500">*</span></label>
-                        <div className="relative">
-                            <IMaskInput
-                                mask="00000-000"
-                                value={formData.cep}
-                                onAccept={(value) => handleMaskChange('cep', value)}
-                                placeholder="00000-000"
-                                className="w-full pl-4 pr-12 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1]"
-                                onBlur={() => {
-                                    if (formData.cep.replace(/\D/g, '').length === 8) handleSearchCep();
-                                }}
-                            />
-                            <button
-                                type="button"
-                                onClick={handleSearchCep}
-                                disabled={searchingCep}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[#00A3B1] hover:bg-[#E6F6F7] rounded transition-colors"
-                            >
-                                {searchingCep ? <div className="animate-spin h-4 w-4 border-2 border-[#00A3B1] border-t-transparent rounded-full" /> : <Search size={16} />}
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2 md:col-span-3">
-                        <label className="text-xs font-semibold text-slate-500">Logradouro <span className="text-red-500">*</span></label>
-                        <input
-                            name="logradouro"
-                            value={formData.logradouro}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1] bg-slate-50"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-slate-500">Número <span className="text-red-500">*</span></label>
-                        <input
-                            name="numero"
-                            value={formData.numero}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1]"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-slate-500">Complemento</label>
-                        <input
-                            name="complemento"
-                            value={formData.complemento}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1]"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-slate-500">Bairro <span className="text-red-500">*</span></label>
-                        <input
-                            name="bairro"
-                            value={formData.bairro}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1] bg-slate-50"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-slate-500">Cidade <span className="text-red-500">*</span></label>
-                        <input
-                            name="cidade"
-                            value={formData.cidade}
-                            onChange={handleChange}
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1] bg-slate-50"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-slate-500">UF <span className="text-red-500">*</span></label>
-                        <input
-                            name="uf"
-                            value={formData.uf}
-                            onChange={handleChange}
-                            maxLength={2}
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1] bg-slate-50 uppercase"
-                        />
-                    </div>
+                {/* Linha 3: Cidade e UF */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field
+                        label="Cidade"
+                        value={formData.cidade}
+                        onChange={(val) => updateForm('cidade', val)}
+                        required
+                    />
+                    <Field
+                        label="UF"
+                        value={formData.uf}
+                        onChange={(val) => updateForm('uf', val)}
+                        required
+                        placeholder="UF"
+                    />
                 </div>
             </div>
 
@@ -178,11 +154,11 @@ const ClientAddressForm: React.FC<ClientAddressFormProps> = ({ initialData, onSu
                 <button
                     type="submit"
                     disabled={loading}
-                    className={`flex items-center gap-2 text-white font-bold py-2.5 px-6 rounded-lg transition-colors shadow-lg
-                        ${loading ? 'bg-slate-400 cursor-not-allowed' : (wizardMode ? 'bg-[#00A3B1] hover:bg-[#008c99]' : 'bg-[#002B49] hover:bg-[#00385D]')}`}
+                    className={`flex items-center gap-2 text-white font-bold py-3.5 px-8 rounded-xl transition-all shadow-lg shadow-[#009BB6]/20 active:scale-95
+                        ${loading ? 'bg-slate-400 cursor-not-allowed' : 'bg-[#009BB6] hover:bg-[#008f9e]'}`}
                 >
-                    {wizardMode ? <CheckCircle size={18} /> : <Save size={18} />}
-                    {loading ? 'Processando...' : (wizardMode ? 'Continuar' : 'Salvar endereço')}
+                    {wizardMode ? <CheckCircle size={20} /> : <Save size={20} />}
+                    {loading ? 'Processando...' : (wizardMode ? 'Continuar' : 'Salvar Endereço')}
                 </button>
             </div>
         </form>

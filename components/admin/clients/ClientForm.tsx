@@ -1,10 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, MapPin, CreditCard, FileText } from 'lucide-react';
+import { ArrowLeft, User, MapPin, CreditCard, FileText, Home, ChevronRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 import ClientGeneralForm from './tabs/ClientGeneralForm';
 import ClientAddressForm from './tabs/ClientAddressForm';
 import ClientBankForm from './tabs/ClientBankForm';
 import ClientContractsTab from './tabs/ClientContractsTab';
+import SuccessModal from '../../shared/modals/SuccessModal';
 
 interface ClientFormProps {
     clientId: string | null;
@@ -16,6 +17,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
     const [loading, setLoading] = useState(false);
     const [clientData, setClientData] = useState<any>(null);
     const [currentClientId, setCurrentClientId] = useState<string | null>(clientId);
+    const [showSuccess, setShowSuccess] = useState(false);
 
     useEffect(() => {
         if (clientId) {
@@ -63,10 +65,14 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
                     // Update local data
                     setClientData({ ...clientData, ...savedClient });
                 }
-                alert('Dados salvos com sucesso!');
+                setShowSuccess(true);
             } else {
                 const err = await res.json();
-                alert(`Erro ao salvar: ${err.error || 'Erro desconhecido'}`);
+                let errorMessage = err.error || 'Erro desconhecido';
+                if (errorMessage.includes('User already registered')) {
+                    errorMessage = 'Este e-mail já está cadastrado no sistema.';
+                }
+                alert(`Erro ao salvar: ${errorMessage}`);
             }
         } catch (error) {
             console.error(error);
@@ -117,47 +123,45 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
     ];
 
     return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm min-h-[600px] flex flex-col">
-            {/* Header */}
-            <div className="p-6 border-b border-slate-100">
-                <div className="flex items-center gap-4 mb-6">
-                    <button
-                        onClick={onBack}
-                        className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-[#002B49] transition-colors"
-                    >
-                        <ArrowLeft size={20} />
+        <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Page Header (Outside Card) */}
+            <div className="flex flex-col gap-4">
+                <div className="text-base font-medium text-slate-500 flex items-center gap-2">
+                    <button onClick={onBack} className="hover:text-[#002B49] transition-colors flex items-center gap-2">
+                        <Home size={18} className="text-slate-400" />
                     </button>
-                    <div>
-                        <div className="text-xs text-slate-400 mb-1 flex items-center gap-2">
-                            <span>Clientes</span>
-                            <span>›</span>
-                            <span>{currentClientId ? 'Editar cliente' : 'Cadastrar cliente'}</span>
-                        </div>
-                        <h1 className="text-2xl font-bold text-[#002B49]">
+                    <ChevronRight size={18} className="text-slate-300" />
+                    <button onClick={onBack} className="hover:text-[#002B49] hover:underline transition-colors cursor-pointer">
+                        Clientes
+                    </button>
+                    <ChevronRight size={18} className="text-slate-300" />
+                    <span className="text-[#002B49] font-semibold">{currentClientId ? 'Editar cliente' : 'Cadastrar cliente'}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <h1 className="text-xl font-bold text-[#002B49]">
                             {currentClientId ? 'Editar cliente' : 'Cadastrar cliente'}
                         </h1>
-
                         {clientData?.status_cliente && (
-                            <div className="flex items-center gap-2 mt-2">
-                                <span className={`px-2 py-0.5 rounded text-xs font-bold border ${clientData.status_cliente === 'Ativo' || clientData.status_cliente === 'Apto'
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                    : clientData.status_cliente === 'Rejeitado'
-                                        ? 'bg-red-50 text-red-700 border-red-100'
-                                        : 'bg-yellow-50 text-yellow-700 border-yellow-100'
-                                    }`}>
-                                    {clientData.status_cliente}
-                                </span>
-                            </div>
+                            <span className={`px-2.5 py-0.5 rounded text-xs font-bold border ${clientData.status_cliente === 'Ativo' || clientData.status_cliente === 'Apto'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                : clientData.status_cliente === 'Rejeitado'
+                                    ? 'bg-red-50 text-red-700 border-red-100'
+                                    : 'bg-yellow-50 text-yellow-700 border-yellow-100'
+                                }`}>
+                                {clientData.status_cliente}
+                            </span>
                         )}
                     </div>
 
                     {/* Status Actions */}
                     {currentClientId && clientData && (
-                        <div className="ml-auto flex gap-2">
+                        <div className="flex gap-2">
                             {(clientData.status_cliente === 'Pendente' || clientData.status_cliente === 'Rejeitado') && (
                                 <button
                                     onClick={() => handleStatusChange('Apto')}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"
                                 >
                                     Aprovar
                                 </button>
@@ -166,7 +170,7 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
                             {(clientData.status_cliente === 'Pendente' || clientData.status_cliente === 'Apto' || clientData.status_cliente === 'Ativo') && (
                                 <button
                                     onClick={() => handleStatusChange('Rejeitado')}
-                                    className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-bold shadow-sm"
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"
                                 >
                                     Rejeitar
                                 </button>
@@ -174,61 +178,75 @@ const ClientForm: React.FC<ClientFormProps> = ({ clientId, onBack }) => {
                         </div>
                     )}
                 </div>
-
-                {/* Tabs */}
-                <div className="flex items-center gap-1 border-b border-slate-100">
-                    {tabs.map(tab => {
-                        const Icon = tab.icon;
-                        const isActive = activeTab === tab.id;
-                        const isDisabled = !currentClientId && tab.id !== 'general';
-
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => !isDisabled && setActiveTab(tab.id)}
-                                disabled={isDisabled}
-                                className={`
-                                    flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors relative
-                                    ${isActive
-                                        ? 'border-[#002B49] text-[#002B49]'
-                                        : 'border-transparent text-slate-400 hover:text-slate-600'
-                                    }
-                                    ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                                `}
-                            >
-                                {tab.label}
-                            </button>
-                        );
-                    })}
-                </div>
             </div>
 
-            {/* Content */}
-            <div className="p-8 flex-1 bg-[#FDFDFD]">
-                {activeTab === 'general' && (
-                    <ClientGeneralForm
-                        initialData={clientData}
-                        onSubmit={handleSaveGeneral}
-                        loading={loading}
-                    />
-                )}
-                {activeTab === 'address' && (
-                    <ClientAddressForm
-                        initialData={clientData}
-                        onSubmit={handleSaveAddress}
-                        loading={loading}
-                    />
-                )}
-                {activeTab === 'bank' && (
-                    <ClientBankForm
-                        clientId={currentClientId || undefined}
-                    />
-                )}
-                {activeTab === 'contracts' && (
-                    <ClientContractsTab
-                        clientId={currentClientId || undefined}
-                    />
-                )}
+            <SuccessModal
+                isOpen={showSuccess}
+                onClose={() => setShowSuccess(false)}
+                description="Dados do cliente salvos com sucesso."
+            />
+
+            {/* Main Content Card */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm min-h-[600px] flex flex-col">
+                {/* Tabs */}
+                <div className="px-8 pt-6 border-b border-slate-200">
+                    <div className="flex gap-8">
+                        {tabs.map(tab => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === tab.id;
+                            const isDisabled = !currentClientId && tab.id !== 'general';
+
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => !isDisabled && setActiveTab(tab.id)}
+                                    disabled={isDisabled}
+                                    className={`pb-4 text-sm font-bold transition-all relative flex items-center gap-2 ${isActive ? 'text-[#00A3B1]' : 'text-slate-400 hover:text-[#002B49]'
+                                        } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                    <Icon size={18} />
+                                    {tab.label}
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="activeTab"
+                                            className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#00A3B1]"
+                                        />
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Form Content */}
+                <div className="p-10 flex-1">
+                    {activeTab === 'general' && (
+                        <ClientGeneralForm
+                            initialData={clientData}
+                            onSubmit={handleSaveGeneral}
+                            loading={loading}
+                        />
+                    )}
+                    {activeTab === 'address' && (
+                        <ClientAddressForm
+                            initialData={clientData}
+                            onSubmit={handleSaveAddress}
+                            loading={loading}
+                        />
+                    )}
+                    {activeTab === 'bank' && (
+                        <ClientBankForm
+                            clientId={currentClientId || undefined}
+                            clientType={clientData?.tipo_cliente}
+                            clientDocument={clientData?.tipo_cliente === 'Pessoa Jurídica' ? clientData?.cnpj : clientData?.cpf}
+                        />
+                    )}
+                    {activeTab === 'contracts' && (
+                        <ClientContractsTab
+                            clientId={currentClientId || undefined}
+                        />
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -1,12 +1,12 @@
 
 import React, { useState } from 'react';
-import { 
-  Home, 
-  Plus, 
-  Search, 
-  UserPlus, 
-  Users, 
-  ChevronRight, 
+import {
+  Home,
+  Plus,
+  Search,
+  UserPlus,
+  Users,
+  ChevronRight,
   ChevronLeft,
   Eye,
   Trash2,
@@ -27,7 +27,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 type ViewMode = 'list' | 'create';
 type ClientTab = 'general' | 'address' | 'bank' | 'contracts';
 
-const ClientsView: React.FC = () => {
+interface ClientsViewProps {
+  userProfile?: any;
+}
+
+const ClientsView: React.FC<ClientsViewProps> = ({ userProfile }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [activeTab, setActiveTab] = useState<ClientTab>('general');
   const [isDeleting, setIsDeleting] = useState(false);
@@ -36,16 +40,40 @@ const ClientsView: React.FC = () => {
   const [showSuccessDelete, setShowSuccessDelete] = useState(false);
   const [personType, setPersonType] = useState<'PF' | 'PJ'>('PF');
 
-  const clients = [
-    { name: 'Fernando da Silva', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Não apto', type: 'Física' },
-    { name: 'Juliana Santana', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Apto', type: 'Física' },
-    { name: 'Ricardo Nogueira', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Não apto', type: 'Física' },
-    { name: 'Joana Martins', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Não apto', type: 'Física' },
-    { name: 'Verônica Oliveira', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Apto', type: 'Física' },
-    { name: 'Victor Luíz', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Apto', type: 'Jurídica' },
-    { name: 'Rodolfo Marques', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Não apto', type: 'Física' },
-    { name: 'Alessandra Campos', doc: '000.000.000-00', consult: 'Carla Gandolfo Educação Financeira LTDA', status: 'Apto', type: 'Física' },
-  ];
+  const [clients, setClients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    const fetchClients = async () => {
+      if (!userProfile?.id) return;
+
+      setLoading(true);
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?consultant_id=${userProfile.id}`);
+        if (!response.ok) throw new Error('Falha ao buscar clientes');
+
+        const data = await response.json();
+        const mappedClients = (data.data || []).map((c: any) => ({
+          id: c.id,
+          name: c.nome_fantasia || c.razao_social || 'Sem nome',
+          doc: c.cpf || c.cnpj || '-',
+          consult: c.meu_consultor?.consultor?.nome_fantasia || '-',
+          status: c.status_cliente || 'Apto', // Defaulting for visual
+          type: c.tipo_cliente === 'Pessoa Física' ? 'Física' : 'Jurídica'
+        }));
+        setClients(mappedClients);
+      } catch (error) {
+        console.error("Error fetching clients:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClients();
+  }, [userProfile]);
+
+  // Hardcoded clients removed in favor of state
+
 
   const StatusBadge = ({ status }: { status: string }) => {
     const isApto = status === 'Apto';
@@ -84,7 +112,7 @@ const ClientsView: React.FC = () => {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-[#002B49]">{viewMode === 'list' ? 'Clientes' : 'Cadastrar cliente'}</h2>
         {viewMode === 'list' && (
-          <button 
+          <button
             onClick={() => setViewMode('create')}
             className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all"
           >
@@ -96,7 +124,7 @@ const ClientsView: React.FC = () => {
 
       <AnimatePresence mode="wait">
         {viewMode === 'list' ? (
-          <motion.div 
+          <motion.div
             key="list"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -158,7 +186,7 @@ const ClientsView: React.FC = () => {
                   ))}
                 </tbody>
               </table>
-              
+
               {/* Pagination */}
               <div className="p-6 border-t border-slate-50 flex items-center justify-between">
                 <button className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[#002B49] disabled:opacity-30">
@@ -178,7 +206,7 @@ const ClientsView: React.FC = () => {
             </div>
           </motion.div>
         ) : (
-          <motion.div 
+          <motion.div
             key="create"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -193,15 +221,14 @@ const ClientsView: React.FC = () => {
                   <button
                     key={tab}
                     onClick={() => setActiveTab(id)}
-                    className={`pb-4 text-sm font-bold transition-all relative whitespace-nowrap ${
-                      activeTab === id ? 'text-[#00A3B1]' : 'text-slate-400 hover:text-[#002B49]'
-                    }`}
+                    className={`pb-4 text-sm font-bold transition-all relative whitespace-nowrap ${activeTab === id ? 'text-[#00A3B1]' : 'text-slate-400 hover:text-[#002B49]'
+                      }`}
                   >
                     {tab}
                     {activeTab === id && (
-                      <motion.div 
+                      <motion.div
                         layoutId="activeClientTab"
-                        className="absolute bottom-0 left-0 w-full h-[2px] bg-[#00A3B1]" 
+                        className="absolute bottom-0 left-0 w-full h-[2px] bg-[#00A3B1]"
                       />
                     )}
                   </button>
@@ -212,16 +239,16 @@ const ClientsView: React.FC = () => {
             {/* Content per Tab */}
             <div className="space-y-8">
               {activeTab === 'general' && (
-                <GeneralTab 
-                  personType={personType} 
-                  setPersonType={setPersonType} 
+                <GeneralTab
+                  personType={personType}
+                  setPersonType={setPersonType}
                 />
               )}
               {activeTab === 'address' && <AddressTab />}
               {activeTab === 'bank' && (
-                <BankTab 
-                  onEditAlert={() => setShowBankEditAlert(true)} 
-                  onDelete={() => setIsDeleting(true)} 
+                <BankTab
+                  onEditAlert={() => setShowBankEditAlert(true)}
+                  onDelete={() => setIsDeleting(true)}
                 />
               )}
               {activeTab === 'contracts' && <ContractsTab />}
@@ -231,23 +258,23 @@ const ClientsView: React.FC = () => {
       </AnimatePresence>
 
       {/* Modals */}
-      <DeleteModal 
-        isOpen={isDeleting} 
-        onClose={() => setIsDeleting(false)} 
+      <DeleteModal
+        isOpen={isDeleting}
+        onClose={() => setIsDeleting(false)}
         onConfirm={() => {
           setIsDeleting(false);
           setShowSuccessDelete(true);
         }}
       />
-      <DataAlertModal 
-        isOpen={showBankEditAlert} 
-        onClose={() => setShowBankEditAlert(false)} 
+      <DataAlertModal
+        isOpen={showBankEditAlert}
+        onClose={() => setShowBankEditAlert(false)}
         title="Alterações nas informações bancárias"
         description="Para realizar quaisquer alterações de dados bancários, é necessário enviar nos um email solicitando com os dados atuais juntamente aos dados novos, incluindo algum comprovante de titularidade."
       />
-      <DataAlertModal 
-        isOpen={showGeneralEditAlert} 
-        onClose={() => setShowGeneralEditAlert(false)} 
+      <DataAlertModal
+        isOpen={showGeneralEditAlert}
+        onClose={() => setShowGeneralEditAlert(false)}
         title="Alterações de dados"
         description="Para alterar os dados, envie um email solicitando a alteração, por exemplo: 'Gostaria de alterar o meu nome de Carlos Araújo para Carlos Silva'."
       />
@@ -263,9 +290,9 @@ const Field = ({ label, placeholder, required, type = 'text', icon: Icon, error 
     </label>
     <div className="relative">
       {Icon && <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />}
-      <input 
-        type={type} 
-        placeholder={placeholder} 
+      <input
+        type={type}
+        placeholder={placeholder}
         className={`w-full ${Icon ? 'pl-11' : 'px-4'} py-3.5 bg-white border rounded-xl text-sm text-[#002B49] font-medium focus:outline-none transition-all ${error ? 'border-red-400 ring-2 ring-red-50 ring-offset-0' : 'border-slate-200 focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]'}`}
       />
       {error && <AlertCircle className="absolute right-4 top-1/2 -translate-y-1/2 text-red-500" size={18} />}
@@ -280,13 +307,13 @@ const GeneralTab = ({ personType, setPersonType }: any) => {
       <div className="space-y-4">
         <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Tipo de cliente</label>
         <div className="flex gap-2 p-1 bg-[#F8FAFB] w-fit rounded-xl border border-slate-100">
-          <button 
+          <button
             onClick={() => setPersonType('PF')}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${personType === 'PF' ? 'bg-white text-[#002B49] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-[#002B49]'}`}
           >
             <Users size={18} /> Pessoa física
           </button>
-          <button 
+          <button
             onClick={() => setPersonType('PJ')}
             className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${personType === 'PJ' ? 'bg-white text-[#002B49] shadow-sm border border-slate-100' : 'text-slate-400 hover:text-[#002B49]'}`}
           >
@@ -346,25 +373,25 @@ const GeneralTab = ({ personType, setPersonType }: any) => {
             </div>
             <Field label="Profissão" placeholder="Informe a profissão" required />
           </div>
-          
+
           <div className="p-6 bg-[#F8FAFB] border border-slate-100 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-             <div className="flex items-center gap-4">
-                <span className="text-xs font-bold text-[#002B49] uppercase">PPE</span>
-                <div className="flex gap-2">
-                  <button className="flex items-center gap-2 bg-white border border-slate-100 px-4 py-1.5 rounded-lg text-xs font-bold text-[#00A3B1] shadow-sm">
-                     <CheckCircle2 size={16} /> Sim
-                  </button>
-                  <button className="flex items-center gap-2 text-slate-400 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50">
-                     <X size={16} /> Não
-                  </button>
-                </div>
-             </div>
-             <div className="w-full md:flex-1 md:max-w-sm">
-                <label className="text-[10px] font-bold text-[#64748B] uppercase mb-1 block">Empresa<span className="text-[#00A3B1] ml-1">*</span></label>
-                <select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs text-[#002B49] font-medium">
-                  <option>FNCD Capital</option>
-                </select>
-             </div>
+            <div className="flex items-center gap-4">
+              <span className="text-xs font-bold text-[#002B49] uppercase">PPE</span>
+              <div className="flex gap-2">
+                <button className="flex items-center gap-2 bg-white border border-slate-100 px-4 py-1.5 rounded-lg text-xs font-bold text-[#00A3B1] shadow-sm">
+                  <CheckCircle2 size={16} /> Sim
+                </button>
+                <button className="flex items-center gap-2 text-slate-400 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-50">
+                  <X size={16} /> Não
+                </button>
+              </div>
+            </div>
+            <div className="w-full md:flex-1 md:max-w-sm">
+              <label className="text-[10px] font-bold text-[#64748B] uppercase mb-1 block">Empresa<span className="text-[#00A3B1] ml-1">*</span></label>
+              <select className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs text-[#002B49] font-medium">
+                <option>FNCD Capital</option>
+              </select>
+            </div>
           </div>
         </div>
       )}
@@ -432,13 +459,13 @@ const BankTab = ({ onEditAlert, onDelete }: any) => {
       {!showForm ? (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <button 
-              onClick={onEditAlert} 
+            <button
+              onClick={onEditAlert}
               className="flex items-center gap-2 bg-[#F8FAFB] text-[#002B49] px-4 py-2 rounded-xl text-xs font-bold border border-slate-100 hover:bg-slate-100 transition-colors"
             >
               <HelpCircle size={16} /> Alterações
             </button>
-            <button 
+            <button
               onClick={() => setShowForm(true)}
               className="flex items-center gap-2 bg-[#00A3B1] text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-md hover:bg-[#008c99] transition-all"
             >
@@ -483,7 +510,7 @@ const BankTab = ({ onEditAlert, onDelete }: any) => {
                   </td>
                   <td className="px-6 py-5 text-right">
                     <button onClick={onDelete} className="text-[#64748B] hover:text-red-500 transition-colors font-bold text-xs uppercase tracking-widest">
-                       Deletar
+                      Deletar
                     </button>
                   </td>
                 </tr>
@@ -496,35 +523,35 @@ const BankTab = ({ onEditAlert, onDelete }: any) => {
         </div>
       ) : (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-           <h3 className="text-sm font-bold text-[#002B49] uppercase tracking-wider">Dados bancários</h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Field label="Documento (CPF)" placeholder="000.000.000-00" required />
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Banco<span className="text-[#00A3B1] ml-1">*</span></label>
-                <select className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium appearance-none">
-                  <option>Selecione o banco</option>
-                </select>
-              </div>
-           </div>
-           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <Field label="Agência" required />
-              <Field label="Dígito (agência)" />
-              <Field label="Conta" required />
-              <Field label="Dígito (conta)" />
-           </div>
-           <div className="w-full md:w-1/2 space-y-2">
-              <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Tipo de conta<span className="text-[#00A3B1] ml-1">*</span></label>
+          <h3 className="text-sm font-bold text-[#002B49] uppercase tracking-wider">Dados bancários</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Field label="Documento (CPF)" placeholder="000.000.000-00" required />
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Banco<span className="text-[#00A3B1] ml-1">*</span></label>
               <select className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium appearance-none">
-                <option>Selecione o tipo de conta</option>
+                <option>Selecione o banco</option>
               </select>
-           </div>
-           <div className="flex justify-end gap-4">
-              <button onClick={() => setShowForm(false)} className="px-8 py-3.5 text-slate-400 font-bold text-sm hover:text-[#002B49]">Cancelar</button>
-              <button className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all">
-                <CheckCircle2 size={18} />
-                Salvar dados bancários
-              </button>
-           </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <Field label="Agência" required />
+            <Field label="Dígito (agência)" />
+            <Field label="Conta" required />
+            <Field label="Dígito (conta)" />
+          </div>
+          <div className="w-full md:w-1/2 space-y-2">
+            <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Tipo de conta<span className="text-[#00A3B1] ml-1">*</span></label>
+            <select className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium appearance-none">
+              <option>Selecione o tipo de conta</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-4">
+            <button onClick={() => setShowForm(false)} className="px-8 py-3.5 text-slate-400 font-bold text-sm hover:text-[#002B49]">Cancelar</button>
+            <button className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] text-white px-8 py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all">
+              <CheckCircle2 size={18} />
+              Salvar dados bancários
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -568,14 +595,14 @@ const ContractsTab = () => (
               </td>
               <td className="px-6 py-5 text-right">
                 <button className="p-2 text-slate-300 hover:text-[#00A3B1] transition-colors">
-                   <Eye size={18} />
+                  <Eye size={18} />
                 </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      
+
       {/* Pagination Footer */}
       <div className="p-6 border-t border-slate-50 flex items-center justify-between bg-[#F8FAFB]/30">
         <button className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[#002B49] disabled:opacity-30">

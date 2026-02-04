@@ -22,18 +22,59 @@ import ContractModal from '../shared/modals/ContractModal';
 
 type ViewMode = 'list' | 'create';
 
-const ContractsView: React.FC = () => {
+interface ContractsViewProps {
+  userProfile?: any;
+}
+
+const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedClient, setSelectedClient] = useState<string>('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [selectedContract, setSelectedContract] = useState<any>(null);
 
-  const contracts = [
-    { id: '0000', extId: '-', status: 'Confirmado', product: '0001 - Câmbio', amount: 'R$ 1.500,00', yield: '2%', period: '12', date: '10/08/2025', end: '10/08/2026' },
-    { id: '0000', extId: '-', status: 'Vigente', product: '0001 - Câmbio', amount: 'R$ 1.500,00', yield: '2%', period: '12', date: '10/08/2025', end: '10/08/2026' },
-    { id: '0000', extId: '-', status: 'Vigente', product: '0001 - Câmbio', amount: 'R$ 1.500,00', yield: '2%', period: '12', date: '10/08/2025', end: '10/08/2026' },
-    { id: '0000', extId: '-', status: 'Rejeitado', product: '0001 - Câmbio', amount: 'R$ 1.500,00', yield: '2%', period: '12', date: '10/08/2025', end: '10/08/2026' },
-  ];
+
+  const [contracts, setContracts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    const fetchContracts = async () => {
+      // Fetch all for now, filter if needed. 
+      // Ideally backend supports filtering.
+      setLoading(true);
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts`);
+        if (!response.ok) throw new Error('Falha ao buscar contratos');
+
+        const data = await response.json();
+
+        // Filter by consultant if user is consultant
+        let filtered = data;
+        if (userProfile?.id && userProfile?.tipo_user === 'Consultor') {
+          filtered = data.filter((c: any) => c.consultor_id === userProfile.id);
+        }
+
+        const mapped = filtered.map((c: any) => ({
+          id: c.id?.substring(0, 6) || '0000',
+          extId: c.id_externo || '-',
+          status: c.status || 'Pendente',
+          product: c.titulo || 'Produto',
+          amount: c.valor_aporte ? `R$ ${c.valor_aporte}` : '-',
+          yield: c.taxa_mensal ? `${c.taxa_mensal}%` : '-',
+          period: c.periodo_meses ? `${c.periodo_meses}` : '-',
+          date: c.data_inicio ? new Date(c.data_inicio).toLocaleDateString('pt-BR') : '-',
+          end: '-' // Calculate end date if needed
+        }));
+
+        setContracts(mapped);
+      } catch (error) {
+        console.error("Error fetching contracts:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchContracts();
+  }, [userProfile]);
 
   const StatusBadge = ({ status }: { status: string }) => {
     const styles: Record<string, string> = {

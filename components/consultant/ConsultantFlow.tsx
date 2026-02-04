@@ -39,10 +39,10 @@ const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile }
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'dashboard': return <ConsultantDashboard />;
+            case 'dashboard': return <ConsultantDashboard userProfile={userProfile} />;
             case 'approval': return <ApprovalsView />;
-            case 'clients': return <ClientsView />;
-            case 'contracts': return <ContractsView />;
+            case 'clients': return <ClientsView userProfile={userProfile} />;
+            case 'contracts': return <ContractsView userProfile={userProfile} />;
             case 'invoice': return <InvoicesView />;
             case 'calendar': return <CalendarView />;
             case 'notifications': return <NotificationsView />;

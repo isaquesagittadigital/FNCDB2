@@ -29,7 +29,7 @@ const App: React.FC = () => {
   const [userProfile, setUserProfile] = useState<any>(null);
 
   useEffect(() => {
-    const restoreSession = () => {
+    const restoreSession = async () => {
       // Check if URL has special view (for new tab support)
       const params = new URLSearchParams(window.location.search);
       if (params.get('view') === 'simulator') {
@@ -45,11 +45,19 @@ const App: React.FC = () => {
           const session = JSON.parse(sessionStr);
           const profile = JSON.parse(profileStr);
 
-          // Restore Supabase session
+          // Restore Supabase session and Wait for it
           if (session) {
-            supabase.auth.setSession(session).then(({ error }) => {
-              if (error) console.error("Error restoring Supabase session:", error);
-            });
+            const { error } = await supabase.auth.setSession(session);
+            if (error) {
+              console.error("Error restoring Supabase session:", error);
+              // If token is invalid (already used, expired, etc), simple cleanup and return to login
+              if (error.message.includes('Invalid Refresh Token') || error.message.includes('Already Used')) {
+                localStorage.removeItem('session');
+                localStorage.removeItem('profile');
+                setView(AppView.LOGIN);
+                return;
+              }
+            }
           }
 
           if (profile && profile.tipo_user) {

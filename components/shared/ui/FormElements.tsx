@@ -12,6 +12,47 @@ export const FormSection: React.FC<{ title: string, children: React.ReactNode, c
     </div>
 );
 
+export const SelectField: React.FC<{
+    label: string,
+    value?: string,
+    onChange?: (val: string) => void,
+    options: { value: string, label: string }[],
+    disabled?: boolean,
+    required?: boolean,
+    icon?: any,
+    className?: string,
+    placeholder?: string
+}> = ({ label, value, onChange, options, disabled, required, icon: Icon, className, placeholder }) => (
+    <div className={`space-y-2 ${className}`}>
+        <label className="flex items-center gap-1 text-sm font-bold text-[#002B49]">
+            {label}{required && <span className="text-[#00A3B1]">*</span>}
+        </label>
+        <div className="relative group">
+            {Icon && (
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00A3B1] transition-colors">
+                    <Icon size={18} />
+                </div>
+            )}
+            <select
+                value={value || ''}
+                onChange={(e) => onChange && onChange(e.target.value)}
+                disabled={disabled}
+                className={`w-full ${Icon ? 'pl-11' : 'px-4'} py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] transition-all disabled:bg-slate-50 disabled:text-slate-400 appearance-none`}
+            >
+                {placeholder && <option value="">{placeholder}</option>}
+                {options.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                    </option>
+                ))}
+            </select>
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+            </div>
+        </div>
+    </div>
+);
+
 export const Field: React.FC<{
     label: string,
     value?: string,
@@ -24,8 +65,10 @@ export const Field: React.FC<{
     rightIcon?: any,
     onRightIconClick?: () => void,
     className?: string,
-    mask?: string
-}> = ({ label, value, onChange, type = 'text', placeholder, disabled, required, icon: Icon, rightIcon: RightIcon, onRightIconClick, className, mask }) => (
+    mask?: string,
+    list?: string,
+    maxLength?: number
+} & React.InputHTMLAttributes<HTMLInputElement>> = ({ label, value, onChange, type = 'text', placeholder, disabled, required, icon: Icon, rightIcon: RightIcon, onRightIconClick, className, mask, ...props }) => (
     <div className={`space-y-2 ${className}`}>
         <label className="flex items-center gap-1 text-sm font-bold text-[#002B49]">
             {label}{required && <span className="text-[#00A3B1]">*</span>}
@@ -45,6 +88,7 @@ export const Field: React.FC<{
                     disabled={disabled}
                     placeholder={placeholder}
                     className={`w-full ${Icon ? 'pl-11' : 'px-4'} py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] transition-all disabled:bg-slate-50 disabled:text-slate-400`}
+                    {...props}
                 />
             ) : (
                 <input
@@ -54,6 +98,7 @@ export const Field: React.FC<{
                     disabled={disabled}
                     placeholder={placeholder}
                     className={`w-full ${Icon ? 'pl-11' : 'px-4'} py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] transition-all disabled:bg-slate-50 disabled:text-slate-400`}
+                    {...props}
                 />
             )}
 
