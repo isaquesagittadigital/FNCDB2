@@ -304,9 +304,22 @@ const ReviewStep: React.FC<ReviewStepProps> = ({ onNext, onBack, onEditStep, dat
                 </button>
 
                 <button
-                    onClick={() => {
+                    onClick={async () => {
                         if (onUpdate) {
-                            onUpdate({ declarations_accepted_at: new Date().toISOString() });
+                            // Capture IP address
+                            let ipAddress = 'Não disponível';
+                            try {
+                                const response = await fetch('https://api.ipify.org?format=json');
+                                const ipData = await response.json();
+                                ipAddress = ipData.ip;
+                            } catch (error) {
+                                console.error('Erro ao capturar IP:', error);
+                            }
+
+                            onUpdate({
+                                declarations_accepted_at: new Date().toISOString(),
+                                ip_address: ipAddress
+                            });
                         }
                         onNext();
                     }}

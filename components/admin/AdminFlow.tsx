@@ -147,7 +147,7 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard':
-                return <AdminDashboard />;
+                return <AdminDashboard onViewAllContracts={() => setActiveTab('contracts')} />;
             case 'simulation':
                 return <Simulator onOpen={onOpenSimulator} />;
             case 'approval':

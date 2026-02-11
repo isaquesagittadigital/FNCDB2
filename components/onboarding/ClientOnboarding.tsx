@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Check, ChevronLeft, ArrowRight, Edit, ArrowLeft } from 'lucide-react';
+import { Check, ChevronLeft, ArrowRight, Edit, ArrowLeft, User, LogOut, ChevronDown } from 'lucide-react';
 import PersonalDataStep from './steps/PersonalDataStep';
 import AddressStep from './steps/AddressStep';
 import ComplianceStep from './steps/ComplianceStep';
@@ -39,10 +39,24 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
     const [formData, setFormData] = useState<any>({});
     const [isCompleted, setIsCompleted] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
     useEffect(() => {
         fetchUserData();
     }, []);
+
+    // Close user menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            if (isUserMenuOpen && !target.closest('.user-menu-container')) {
+                setIsUserMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isUserMenuOpen]);
 
     const fetchUserData = async () => {
         try {
@@ -214,6 +228,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
                 validation_token: formData.validation_token,
                 validation_timestamp: formData.validation_timestamp,
                 declarations_accepted_at: formData.declarations_accepted_at,
+                ip_address: formData.ip_address,
                 suitability_profile: formData.suitability_profile, // Persist calculated profile
                 current_step: step ?? currentStep,
                 updated_at: new Date().toISOString()
@@ -228,6 +243,15 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
         } catch (error) {
             console.error('Error saving data:', error);
             throw error;
+        }
+    };
+
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut();
+            window.location.href = '/login';
+        } catch (error) {
+            console.error('Error logging out:', error);
         }
     };
 
@@ -335,9 +359,45 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
     return (
         <div className="min-h-screen bg-[#F9FAFB] py-8 px-4 sm:px-6 lg:px-8">
             <div className="max-w-7xl mx-auto">
-                {/* Logo Section */}
-                <div className="flex justify-center mb-8">
-                    <LogoIcon className="w-12 h-12" dark={true} />
+                {/* Header with Logo and User Menu */}
+                <div className="flex justify-between items-center mb-8">
+                    {/* Empty space for alignment */}
+                    <div className="w-10"></div>
+
+                    {/* Logo Section - Centered */}
+                    <div className="flex justify-center flex-1">
+                        <LogoIcon className="w-12 h-12" dark={true} />
+                    </div>
+
+                    {/* User Menu - Right */}
+                    <div className="relative user-menu-container">
+                        <button
+                            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors"
+                        >
+                            <div className="w-8 h-8 bg-[#0EA5E9] rounded-full flex items-center justify-center text-white font-bold text-sm">
+                                {formData?.nome_fantasia?.charAt(0)?.toUpperCase() || <User size={16} />}
+                            </div>
+                            <ChevronDown size={16} className={`text-slate-600 transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Dropdown Menu */}
+                        {isUserMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                                <div className="px-4 py-3 border-b border-slate-100">
+                                    <p className="text-sm font-semibold text-slate-900">{formData?.nome_fantasia || 'Usuário'}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{formData?.email || ''}</p>
+                                </div>
+                                <button
+                                    onClick={handleLogout}
+                                    className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
+                                >
+                                    <LogOut size={16} className="text-slate-500" />
+                                    Sair
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Stepper */}

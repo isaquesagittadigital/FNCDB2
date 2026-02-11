@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     LayoutDashboard,
     Calendar,
@@ -9,6 +9,7 @@ import {
 
 import DashboardLayout from '../layout/DashboardLayout';
 import ClientDashboard from './ClientDashboard';
+import ClientOnboarding from '../onboarding/ClientOnboarding';
 
 import CalendarView from '../shared/CalendarView';
 import NotificationsView from '../shared/NotificationsView';
@@ -24,13 +25,38 @@ interface ClientFlowProps {
 
 const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout, userProfile }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [showOnboarding, setShowOnboarding] = useState(false);
+
+    useEffect(() => {
+        if (userProfile) {
+            // DB is the source of truth. 
+            // If onboarding_finalizado is explicitly true, show dashboard.
+            // Otherwise, show onboarding.
+            if (userProfile.onboarding_finalizado === true) {
+                setShowOnboarding(false);
+            } else {
+                setShowOnboarding(true);
+            }
+        }
+    }, [userProfile]);
+
+    const handleOnboardingFinish = () => {
+        // Optimistically update local state to show dashboard
+        setShowOnboarding(false);
+        // Optionally update the userProfile in parent if possible, but for now this hides the onboarding
+    };
+
+    if (showOnboarding) {
+        return <ClientOnboarding onFinish={handleOnboardingFinish} />;
+    }
 
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <ClientDashboard />;
             case 'calendar': return <CalendarView />;
             case 'notifications': return <NotificationsView />;
-            case 'documents': return <DocumentsView />;
+
+            case 'documents': return <DocumentsView userProfile={userProfile} />;
             case 'profile': return <ProfileView />;
             default:
                 return (
