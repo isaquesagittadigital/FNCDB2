@@ -3,7 +3,7 @@ import React from 'react';
 import { ArrowLeft, Check, Edit2 } from 'lucide-react';
 
 interface ReviewStepProps {
-    onNext: () => void;
+    onNext: (data?: any) => void;
     onBack: () => void;
     onEditStep: (step: number) => void;
     data: any;
@@ -305,23 +305,27 @@ const ReviewStep: React.FC<ReviewStepProps> = ({ onNext, onBack, onEditStep, dat
 
                 <button
                     onClick={async () => {
-                        if (onUpdate) {
-                            // Capture IP address
-                            let ipAddress = 'Não disponível';
-                            try {
-                                const response = await fetch('https://api.ipify.org?format=json');
-                                const ipData = await response.json();
-                                ipAddress = ipData.ip;
-                            } catch (error) {
-                                console.error('Erro ao capturar IP:', error);
-                            }
-
-                            onUpdate({
-                                declarations_accepted_at: new Date().toISOString(),
-                                ip_address: ipAddress
-                            });
+                        // Capture IP address
+                        let ipAddress = 'Não disponível';
+                        try {
+                            const response = await fetch('https://api.ipify.org?format=json');
+                            const ipData = await response.json();
+                            ipAddress = ipData.ip;
+                        } catch (error) {
+                            console.error('Erro ao capturar IP:', error);
                         }
-                        onNext();
+
+                        const updateData = {
+                            declarations_accepted_at: new Date().toISOString(),
+                            ip_address: ipAddress
+                        };
+
+                        if (onUpdate) {
+                            onUpdate(updateData);
+                        }
+
+                        // Pass data to onNext to ensure it's saved immediately
+                        onNext(updateData);
                     }}
                     disabled={!data.declaration_truth || !data.declaration_nda || !data.declaration_adhesion}
                     className={`px-6 py-2.5 font-medium rounded-lg transition-colors shadow-lg shadow-sky-500/20 ${(!data.declaration_truth || !data.declaration_nda || !data.declaration_adhesion) ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-[#0EA5E9] text-white hover:bg-[#0284C7]'}`}

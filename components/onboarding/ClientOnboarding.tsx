@@ -115,31 +115,34 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
         setFormData((prev: any) => ({ ...prev, ...newData }));
     };
 
-    const saveData = async (step?: number) => {
+    const saveData = async (step?: number, dataOverride?: any) => {
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
+            // Use current state combined with any overrides
+            const currentData = { ...formData, ...dataOverride };
+
             // 1. Update User Data (Personal + Address) in 'usuarios'
             const userData = {
-                nome_fantasia: formData.nome_fantasia,
-                cpf: formData.cpf?.replace(/\D/g, ''),
-                data_nascimento: formData.data_nascimento,
-                nacionalidade: formData.nacionalidade,
-                celular: formData.celular?.replace(/\D/g, ''),
-                email: formData.email, // Ensure email is updated in usuarios
-                profissao: formData.profissao,
-                rg: formData.rg,
-                orgao_emissor: formData.orgao_emissor,
-                uf_rg: formData.uf_rg,
-                estado_civil: formData.estado_civil,
-                logradouro_end: formData.logradouro,
-                numero_end: formData.numero,
-                complemento_end: formData.complemento,
-                bairro: formData.bairro,
-                cidade: formData.cidade,
-                uf: formData.uf,
-                cep: formData.cep?.replace(/\D/g, '')
+                nome_fantasia: currentData.nome_fantasia,
+                cpf: currentData.cpf?.replace(/\D/g, ''),
+                data_nascimento: currentData.data_nascimento,
+                nacionalidade: currentData.nacionalidade,
+                celular: currentData.celular?.replace(/\D/g, ''),
+                email: currentData.email, // Ensure email is updated in usuarios
+                profissao: currentData.profissao,
+                rg: currentData.rg,
+                orgao_emissor: currentData.orgao_emissor,
+                uf_rg: currentData.uf_rg,
+                estado_civil: currentData.estado_civil,
+                logradouro_end: currentData.logradouro,
+                numero_end: currentData.numero,
+                complemento_end: currentData.complemento,
+                bairro: currentData.bairro,
+                cidade: currentData.cidade,
+                uf: currentData.uf,
+                cep: currentData.cep?.replace(/\D/g, '')
             };
 
             const { error: userError } = await supabase
@@ -150,24 +153,24 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
             if (userError) console.error('Error updating usuario:', userError);
 
             // 2. Update Bank Account in 'contas_bancarias'
-            if (formData.bankAccount) {
+            if (currentData.bankAccount) {
                 const bankData = {
-                    banco: formData.bankAccount.banco,
-                    agencia: formData.bankAccount.agencia,
-                    digito_agencia: formData.bankAccount.digito_agencia, // New field
-                    conta: formData.bankAccount.conta,
-                    digito_conta: formData.bankAccount.digito_conta, // New field
-                    tipo_conta: formData.bankAccount.tipo_conta,
-                    titular: formData.bankAccount.titular,
-                    cpf_cnpj: formData.bankAccount.cpf_titular?.replace(/\D/g, ''), // Map to correct column name
+                    banco: currentData.bankAccount.banco,
+                    agencia: currentData.bankAccount.agencia,
+                    digito_agencia: currentData.bankAccount.digito_agencia, // New field
+                    conta: currentData.bankAccount.conta,
+                    digito_conta: currentData.bankAccount.digito_conta, // New field
+                    tipo_conta: currentData.bankAccount.tipo_conta,
+                    titular: currentData.bankAccount.titular,
+                    cpf_cnpj: currentData.bankAccount.cpf_titular?.replace(/\D/g, ''), // Map to correct column name
                     user_id: user.id
                 };
 
-                if (formData.bankAccount.id) {
+                if (currentData.bankAccount.id) {
                     await supabase
                         .from('contas_bancarias')
                         .update(bankData)
-                        .eq('id', formData.bankAccount.id);
+                        .eq('id', currentData.bankAccount.id);
                 } else {
                     const { data: newBank } = await supabase
                         .from('contas_bancarias')
@@ -184,52 +187,52 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
             // 3. Update Onboarding Data in 'user_onboarding'
             const onboardingFields = {
                 user_id: user.id,
-                logradouro_correspondencia: formData.logradouro_correspondencia,
-                numero_correspondencia: formData.numero_correspondencia,
-                complemento_correspondencia: formData.complemento_correspondencia,
-                bairro_correspondencia: formData.bairro_correspondencia,
-                cidade_correspondencia: formData.cidade_correspondencia,
-                uf_correspondencia: formData.uf_correspondencia,
-                cep_correspondencia: formData.cep_correspondencia?.replace(/\D/g, ''),
-                pep_status: formData.pep_status,
-                pep_details: formData.pep_details,
-                resource_origin: formData.resource_origin,
-                resource_origin_other: formData.resource_origin_other, // New field to save
-                resource_proof_available: formData.resource_proof_available,
-                resource_proof_details: formData.resource_proof_details,
-                international_tax_residency: formData.international_tax_residency,
-                international_tax_countries: formData.international_tax_countries,
-                investment_horizon: formData.investment_horizon,
-                lockup_tolerance: formData.lockup_tolerance,
-                liquidity_tolerance: formData.liquidity_tolerance,
-                experience_level: formData.experience_level,
-                experience_areas: formData.experience_areas,
-                experience_years: formData.experience_years ? parseInt(formData.experience_years) : null,
-                scp_experience: formData.scp_experience,
-                loss_absorption_capacity: formData.loss_absorption_capacity,
-                patrimony_allocation: formData.patrimony_allocation,
-                investment_objective: formData.investment_objective,
-                terms_licit: formData.terms_licit,
-                terms_authorize: formData.terms_authorize,
-                terms_aware: formData.terms_aware,
-                declaration_truth: formData.declaration_truth,
-                declaration_nda: formData.declaration_nda,
-                declaration_adhesion: formData.declaration_adhesion,
-                terms_accepted: formData.terms_accepted,
-                risk_data_truth: formData.risk_data_truth,
-                risk_nda_read: formData.risk_nda_read,
-                risk_adhesion_bind: formData.risk_adhesion_bind,
-                risk_calendar_aware: formData.risk_calendar_aware,
-                risk_acknowledged: formData.risk_acknowledged,
-                risk_acknowledged_at: formData.risk_acknowledged_at,
-                privacy_policy_accepted: formData.privacy_policy_accepted,
-                marketing_consent: formData.marketing_consent,
-                data_verification_consent: formData.data_verification_consent,
-                validation_token: formData.validation_token,
-                validation_timestamp: formData.validation_timestamp,
-                declarations_accepted_at: formData.declarations_accepted_at,
-                ip_address: formData.ip_address,
-                suitability_profile: formData.suitability_profile, // Persist calculated profile
+                logradouro_correspondencia: currentData.logradouro_correspondencia,
+                numero_correspondencia: currentData.numero_correspondencia,
+                complemento_correspondencia: currentData.complemento_correspondencia,
+                bairro_correspondencia: currentData.bairro_correspondencia,
+                cidade_correspondencia: currentData.cidade_correspondencia,
+                uf_correspondencia: currentData.uf_correspondencia,
+                cep_correspondencia: currentData.cep_correspondencia?.replace(/\D/g, ''),
+                pep_status: currentData.pep_status,
+                pep_details: currentData.pep_details,
+                resource_origin: currentData.resource_origin,
+                resource_origin_other: currentData.resource_origin_other, // New field to save
+                resource_proof_available: currentData.resource_proof_available,
+                resource_proof_details: currentData.resource_proof_details,
+                international_tax_residency: currentData.international_tax_residency,
+                international_tax_countries: currentData.international_tax_countries,
+                investment_horizon: currentData.investment_horizon,
+                lockup_tolerance: currentData.lockup_tolerance,
+                liquidity_tolerance: currentData.liquidity_tolerance,
+                experience_level: currentData.experience_level,
+                experience_areas: currentData.experience_areas,
+                experience_years: currentData.experience_years ? parseInt(currentData.experience_years) : null,
+                scp_experience: currentData.scp_experience,
+                loss_absorption_capacity: currentData.loss_absorption_capacity,
+                patrimony_allocation: currentData.patrimony_allocation,
+                investment_objective: currentData.investment_objective,
+                terms_licit: currentData.terms_licit,
+                terms_authorize: currentData.terms_authorize,
+                terms_aware: currentData.terms_aware,
+                declaration_truth: currentData.declaration_truth,
+                declaration_nda: currentData.declaration_nda,
+                declaration_adhesion: currentData.declaration_adhesion,
+                terms_accepted: currentData.terms_accepted,
+                risk_data_truth: currentData.risk_data_truth,
+                risk_nda_read: currentData.risk_nda_read,
+                risk_adhesion_bind: currentData.risk_adhesion_bind,
+                risk_calendar_aware: currentData.risk_calendar_aware,
+                risk_acknowledged: currentData.risk_acknowledged,
+                risk_acknowledged_at: currentData.risk_acknowledged_at,
+                privacy_policy_accepted: currentData.privacy_policy_accepted,
+                marketing_consent: currentData.marketing_consent,
+                data_verification_consent: currentData.data_verification_consent,
+                validation_token: currentData.validation_token,
+                validation_timestamp: currentData.validation_timestamp,
+                declarations_accepted_at: currentData.declarations_accepted_at,
+                ip_address: currentData.ip_address,
+                suitability_profile: currentData.suitability_profile, // Persist calculated profile
                 current_step: step ?? currentStep,
                 updated_at: new Date().toISOString()
             };
@@ -239,6 +242,11 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
                 .upsert(onboardingFields, { onConflict: 'user_id' });
 
             if (onboardingError) console.error('Error updating user_onboarding:', onboardingError);
+
+            // Also update local state if override was provided
+            if (dataOverride) {
+                setFormData((prev: any) => ({ ...prev, ...dataOverride }));
+            }
 
         } catch (error) {
             console.error('Error saving data:', error);
@@ -255,11 +263,11 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
         }
     };
 
-    const handleFinish = async () => {
+    const handleFinish = async (dataOverride?: any) => {
         try {
             setLoading(true);
             const minTimePromise = new Promise(resolve => setTimeout(resolve, 2000)); // Longer for finish
-            await saveData();
+            await saveData(undefined, dataOverride);
 
             // Mark onboarding as finalized in 'usuarios'
             const { data: { user } } = await supabase.auth.getUser();
@@ -268,6 +276,54 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
                     .from('usuarios')
                     .update({ onboarding_finalizado: true })
                     .eq('id', user.id);
+
+                // Notify Consultant and Admins
+                try {
+                    // 1. Find Consultant
+                    const { data: consultantLink } = await supabase
+                        .from('meu_consultor')
+                        .select('consultor_id')
+                        .eq('cliente_id', user.id)
+                        .single();
+
+                    // 2. Insert notifications
+                    const notifications = [];
+
+                    // For Consultant
+                    if (consultantLink && consultantLink.consultor_id) {
+                        notifications.push({
+                            user_id: consultantLink.consultor_id,
+                            type: 'Sistema',
+                            title: 'Cliente Finalizou Onboarding',
+                            content: `O cliente ${formData.nome_fantasia || 'Novo Cliente'} finalizou o processo de onboarding.`,
+                            is_read: false
+                        });
+                    }
+
+                    // For Admins
+                    const { data: admins } = await supabase
+                        .from('usuarios')
+                        .select('id')
+                        .eq('tipo_user', 'Admin');
+
+                    if (admins && admins.length > 0) {
+                        admins.forEach(admin => {
+                            notifications.push({
+                                user_id: admin.id,
+                                type: 'Sistema',
+                                title: 'Novo Cliente Onboarding Completo',
+                                content: `O cliente ${formData.nome_fantasia || 'Novo Cliente'} finalizou o processo de onboarding.`,
+                                is_read: false
+                            });
+                        });
+                    }
+
+                    if (notifications.length > 0) {
+                        await supabase.from('notificacoes').insert(notifications);
+                    }
+                } catch (notifError) {
+                    console.error("Error creating notifications:", notifError);
+                }
             }
 
             await minTimePromise;
@@ -280,7 +336,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
         }
     };
 
-    const handleNext = async () => {
+    const handleNext = async (dataOverride?: any) => {
         if (currentStep < steps.length - 1) {
             try {
                 setLoading(true);
@@ -288,7 +344,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
                 // Add a minimum delay to show the animation nicely
                 const minTimePromise = new Promise(resolve => setTimeout(resolve, 800));
 
-                await Promise.all([saveData(nextStep), minTimePromise]);
+                await Promise.all([saveData(nextStep, dataOverride), minTimePromise]);
 
                 setCurrentStep(nextStep);
                 window.scrollTo(0, 0);
@@ -298,7 +354,7 @@ const ClientOnboarding: React.FC<ClientOnboardingProps> = ({ onFinish }) => {
                 setLoading(false);
             }
         } else {
-            handleFinish();
+            handleFinish(dataOverride);
         }
     };
 

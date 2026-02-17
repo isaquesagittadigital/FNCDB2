@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { supabase } from '../lib/supabase';
 import { z } from 'zod';
 import { sendWelcomeEmail } from '../services/email.service';
+import { createContractEnvelope, getEnvelopeDetails, createWebhook, listWebhooks, deleteWebhook } from '../services/clicksign';
 import crypto from 'crypto';
 
 const clientSchema = z.object({
@@ -540,53 +541,62 @@ export async function adminRoutes(server: FastifyInstance) {
     // Global Contracts Management
     server.get('/contracts', async (_request: any, reply) => {
         try {
-            // Join contratos with users to get client name
-            // Assuming 'usuarios' table contains client info and user_id in 'contratos' FKs to it (or auth.users which is linked)
-            // Using Supabase join syntax: select('*, usuarios(*)') if there is a FK relation.
-            // If FK is not explicitly defined in Supabase schema between contratos and usuarios (public), we might need to rely on matching IDs.
-            // Let's try explicit join assuming FK exists or Supabase infers it.
-            // If it fails, we will fallback to separate fetch or raw query.
+            // Direct REST API call to bypass supabase-js PostgREST schema cache issue
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-            // Note: If no FK exists, we can still fetch all contracts and then fetch users where id in (contract_user_ids).
-            // But let's try the join first as it's cleaner.
-            const { data, error } = await supabase
-                .from('contratos')
-                .select('*, usuarios:user_id(nome_fantasia, email)') // Aliasing user_id relation if possible, or just usuarios(*). 
-                // If the relation name is different, this might fail. 
-                // In create_contracts_table.sql: user_id REFERENCES auth.users(id).
-                // 'usuarios' table likely also has id as PK (referencing auth.users).
-                // Join between public.contratos and public.usuarios via shared ID (which is auth.users.id) is... 
-                // Actually they don't reference each other directly. They both reference auth.users.
-                // So standard join syntax might not work directly unless we defined a FK from contratos.user_id to usuarios.id.
-                // WE DID NOT define that in the SQL script contracts table creation.
-                // So we can't simple join public 'contratos' with public 'usuarios'.
+            const contractsRes = await fetch(
+                `${supabaseUrl}/rest/v1/contratos?select=id,user_id,codigo,titulo,status,valor_aporte,taxa_mensal,periodo_meses,data_inicio,dia_pagamento,consultor_id,created_at,preferencia_assinatura,taxa_consultor,taxa_lider,lider_id,data_assinatura,arquivo_url,segundo_pagamento,status_contrato_id&order=created_at.desc`,
+                {
+                    headers: {
+                        'apikey': serviceKey!,
+                        'Authorization': `Bearer ${serviceKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
 
-                // WORKAROUND: Fetch all contracts, then fetch all relevant users from 'usuarios' table.
-                // This is less efficient but guarantees it works without altering schema constraints now.
-                .order('created_at', { ascending: false });
+            if (!contractsRes.ok) {
+                const errText = await contractsRes.text();
+                throw new Error(`Supabase REST error: ${errText}`);
+            }
 
-            if (error) throw error;
+            const contracts = (await contractsRes.json()) as any[];
 
-            // Fetch users manually
-            if (data && data.length > 0) {
-                const userIds = [...new Set(data.map((c: any) => c.user_id))];
-                const { data: users, error: userError } = await supabase
-                    .from('usuarios')
-                    .select('id, nome_fantasia, email')
-                    .in('id', userIds);
+            // Side-load user names
+            if (contracts && contracts.length > 0) {
+                const userIds = [...new Set(contracts.map((c: any) => c.user_id).filter(Boolean))] as string[];
 
-                if (!userError && users) {
-                    // Merge data
-                    const contractsWithUser = data.map((c: any) => {
-                        const user = users.find((u: any) => u.id === c.user_id);
-                        return { ...c, client_name: user ? user.nome_fantasia : 'Desconhecido' };
-                    });
-                    return reply.send(contractsWithUser);
+                if (userIds.length > 0) {
+                    const idsParam = userIds.map((id) => `"${id}"`).join(',');
+                    const usersRes = await fetch(
+                        `${supabaseUrl}/rest/v1/usuarios?select=id,nome_fantasia,razao_social,email&id=in.(${idsParam})`,
+                        {
+                            headers: {
+                                'apikey': serviceKey!,
+                                'Authorization': `Bearer ${serviceKey}`,
+                                'Content-Type': 'application/json'
+                            }
+                        }
+                    );
+
+                    if (usersRes.ok) {
+                        const users = (await usersRes.json()) as any[];
+                        const result = contracts.map((c: any) => {
+                            const user = users.find((u: any) => u.id === c.user_id);
+                            return {
+                                ...c,
+                                client_name: user ? (user.nome_fantasia || user.razao_social || user.email) : 'Desconhecido'
+                            };
+                        });
+                        return reply.send(result);
+                    }
                 }
             }
 
-            return reply.send(data);
+            return reply.send(contracts || []);
         } catch (err: any) {
+            server.log.error(err);
             return reply.status(500).send({ error: err.message });
         }
     });
@@ -598,6 +608,21 @@ export async function adminRoutes(server: FastifyInstance) {
                 return reply.status(400).send({ error: 'Cliente (user_id) e Título são obrigatórios.' });
             }
 
+            // Generate a unique 6-digit numeric code
+            let codigo: string;
+            let isUnique = false;
+            do {
+                codigo = String(Math.floor(100000 + Math.random() * 900000));
+                const { data: existing } = await supabase
+                    .from('contratos')
+                    .select('id')
+                    .eq('codigo', codigo)
+                    .maybeSingle();
+                isUnique = !existing;
+            } while (!isUnique);
+
+            body.codigo = codigo;
+
             // Map frontend fields to DB columns if they mismatch, or just pass body
             const { data, error } = await supabase
                 .from('contratos')
@@ -606,6 +631,19 @@ export async function adminRoutes(server: FastifyInstance) {
                 .single();
 
             if (error) throw error;
+
+            // Notify Client
+            if (data && data.user_id) {
+                const { error: notifError } = await supabase.from('notificacoes').insert({
+                    user_id: data.user_id,
+                    type: 'Sistema',
+                    title: 'Novo Contrato Disponível',
+                    content: `Um novo contrato "${data.titulo}" foi gerado e está disponível para sua visualização.`,
+                    is_read: false
+                });
+                if (notifError) console.error('Error creating notification:', notifError);
+            }
+
             return reply.send(data);
         } catch (err: any) {
             return reply.status(500).send({ error: err.message });
@@ -637,6 +675,38 @@ export async function adminRoutes(server: FastifyInstance) {
     server.delete('/contracts/:id', async (request: any, reply) => {
         const { id } = request.params;
         try {
+            // Only allow deleting contracts with status 'Rascunho'
+            const { data: contract, error: fetchError } = await supabase
+                .from('contratos')
+                .select('status')
+                .eq('id', id)
+                .single();
+
+            if (fetchError || !contract) {
+                return reply.status(404).send({ error: 'Contrato não encontrado.' });
+            }
+
+            if (contract.status !== 'Rascunho') {
+                return reply.status(400).send({ error: 'Apenas contratos com status Rascunho podem ser excluídos.' });
+            }
+
+            // Delete associated calendario/pagamentos first
+            const supabaseUrl = process.env.SUPABASE_URL!;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+            await fetch(
+                `${supabaseUrl}/rest/v1/calendario%2Fpagamentos?contrato_id=eq.${id}`,
+                {
+                    method: 'DELETE',
+                    headers: {
+                        'apikey': serviceKey,
+                        'Authorization': `Bearer ${serviceKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    }
+                }
+            );
+
+            // Delete the contract
             const { error } = await supabase
                 .from('contratos')
                 .delete()
@@ -645,6 +715,100 @@ export async function adminRoutes(server: FastifyInstance) {
             if (error) throw error;
             return reply.send({ message: 'Contrato excluído com sucesso' });
         } catch (err: any) {
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // Calendar Payments (Bulk Insert)
+    server.post('/calendar-payments', async (request: any, reply) => {
+        const { payments } = request.body;
+        try {
+            if (!Array.isArray(payments) || payments.length === 0) {
+                return reply.status(400).send({ error: 'Pagamentos são obrigatórios.' });
+            }
+
+            // Use direct fetch with URL-encoded table name (slash in name breaks supabase-js)
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+
+
+            const res = await fetch(
+                `${supabaseUrl}/rest/v1/calendario%2Fpagamentos`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'apikey': serviceKey!,
+                        'Authorization': `Bearer ${serviceKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify(payments)
+                }
+            );
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Supabase error: ${errText}`);
+            }
+
+            return reply.send({ message: 'Pagamentos inseridos com sucesso', count: payments.length });
+        } catch (err: any) {
+            server.log.error(err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // Calendar Payments (GET - Fetch)
+    server.get('/calendar-payments', async (request: any, reply) => {
+        try {
+            const { consultor_id, cliente_id, month, year } = request.query;
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+            // Build query params for PostgREST
+            const params = new URLSearchParams();
+            params.append('select', '*');
+            params.append('order', 'data.asc');
+
+            if (consultor_id) {
+                params.append('consultor_id', `eq.${consultor_id}`);
+            }
+            if (cliente_id) {
+                params.append('cliente_id', `eq.${cliente_id}`);
+            }
+            // Filter by month/year if provided
+            if (month && year) {
+                const m = parseInt(month);
+                const y = parseInt(year);
+                const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+                // last day of month
+                const lastDay = new Date(y, m, 0).getDate();
+                const endDate = `${y}-${String(m).padStart(2, '0')}-${lastDay}`;
+                params.append('data', `gte.${startDate}`);
+                params.append('data', `lte.${endDate}`);
+            }
+
+            const res = await fetch(
+                `${supabaseUrl}/rest/v1/calendario%2Fpagamentos?${params.toString()}`,
+                {
+                    headers: {
+                        'apikey': serviceKey!,
+                        'Authorization': `Bearer ${serviceKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Supabase error: ${errText}`);
+            }
+
+            const data = (await res.json()) as any[];
+            return reply.send(data);
+        } catch (err: any) {
+            server.log.error(err);
             return reply.status(500).send({ error: err.message });
         }
     });
@@ -808,6 +972,703 @@ export async function adminRoutes(server: FastifyInstance) {
         } catch (err: any) {
             console.error('Delete User Error:', err);
             return reply.status(500).send({ error: err.message || 'Erro ao excluir usuário' });
+        }
+    });
+
+    // ─── Clicksign Integration ──────────────────────────────────────────────────
+
+    // POST /clicksign/send-contract - Create envelope + send for signature
+    server.post('/clicksign/send-contract', async (request: any, reply) => {
+        try {
+            const { contractId, sendMethod } = request.body;
+
+            if (!contractId) {
+                return reply.status(400).send({ error: 'contractId é obrigatório.' });
+            }
+
+            // Fetch contract data
+            const { data: contract, error: contractError } = await supabase
+                .from('contratos')
+                .select('*')
+                .eq('id', contractId)
+                .single();
+
+            if (contractError || !contract) {
+                return reply.status(404).send({ error: 'Contrato não encontrado.' });
+            }
+
+            // Fetch client data - contratos uses 'user_id' for client reference
+            let client: any = null;
+            const clientIdField = contract.user_id || contract.cliente_id;
+            if (clientIdField) {
+                const { data: clientData } = await supabase
+                    .from('usuarios')
+                    .select('nome_fantasia, email, cpf, data_nascimento, celular')
+                    .eq('id', clientIdField)
+                    .single();
+                if (clientData) client = clientData;
+            }
+
+            if (!client || !client.email) {
+                return reply.status(400).send({ error: 'Cliente não encontrado ou sem email cadastrado. Verifique os dados do cliente.' });
+            }
+
+            // Validate phone for WhatsApp/SMS delivery
+            const deliveryMethod = (sendMethod || 'Email').toLowerCase() as 'email' | 'whatsapp' | 'sms';
+            if ((deliveryMethod === 'whatsapp' || deliveryMethod === 'sms') && !client.celular) {
+                return reply.status(400).send({
+                    error: `O cliente não possui celular cadastrado. Para enviar por ${sendMethod}, cadastre o celular do cliente primeiro.`
+                });
+            }
+
+            console.log(`[Clicksign] Sending contract for client: ${client.nome_fantasia} (${client.email})`);
+
+            // Call Clicksign flow (company representatives are configured in the service)
+            const result = await createContractEnvelope({
+                contractId: contract.codigo || contractId.substring(0, 8),
+                clientName: client?.nome_fantasia || 'Cliente',
+                clientEmail: client?.email || '',
+                clientCpf: client?.cpf || '52998224725',
+                clientBirthday: client?.data_nascimento || undefined,
+                clientPhone: client?.celular || undefined,
+                deliveryMethod,
+                amount: contract.valor_aporte || 0,
+                rate: contract.taxa_mensal || 0,
+                period: contract.periodo_meses || 6,
+                startDate: contract.data_inicio || new Date().toISOString(),
+                productName: contract.titulo || 'FNCD Capital'
+            });
+
+            // Update contract with envelope info (clicksign columns may not exist yet)
+            try {
+                await supabase
+                    .from('contratos')
+                    .update({
+                        clicksign_envelope_id: result.envelopeId,
+                        clicksign_document_id: result.documentId,
+                        status: 'Assinando'
+                    })
+                    .eq('id', contractId);
+            } catch (updateErr: any) {
+                // If clicksign columns don't exist, just update status
+                console.warn('[Clicksign] Could not update clicksign columns, updating status only:', updateErr.message);
+                await supabase
+                    .from('contratos')
+                    .update({ status: 'Assinando' })
+                    .eq('id', contractId);
+            }
+
+            return reply.send({
+                success: true,
+                message: 'Contrato enviado para assinatura via Clicksign.',
+                envelopeId: result.envelopeId,
+                documentId: result.documentId,
+                signers: result.signers
+            });
+        } catch (err: any) {
+            console.error('[Clicksign Route] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // GET /clicksign/envelope/:id - Get envelope status
+    server.get('/clicksign/envelope/:id', async (request: any, reply) => {
+        try {
+            const { id } = request.params;
+            const details = await getEnvelopeDetails(id);
+            return reply.send(details);
+        } catch (err: any) {
+            console.error('[Clicksign Route] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // ─── Webhook Management ───────────────────────────────────────────
+
+    // POST /clicksign/webhook/register - Register webhook on Clicksign
+    server.post('/clicksign/webhook/register', async (request: any, reply) => {
+        try {
+            const { url } = request.body;
+
+            if (!url) {
+                return reply.status(400).send({ error: 'url é obrigatório.' });
+            }
+
+            const result = await createWebhook(url);
+            return reply.send({
+                success: true,
+                message: 'Webhook registrado com sucesso na Clicksign.',
+                webhook: result.data
+            });
+        } catch (err: any) {
+            console.error('[Webhook Register] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // GET /clicksign/webhooks - List registered webhooks
+    server.get('/clicksign/webhooks', async (_request: any, reply) => {
+        try {
+            const result = await listWebhooks();
+            return reply.send({
+                webhooks: result.data || []
+            });
+        } catch (err: any) {
+            console.error('[Webhook List] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // DELETE /clicksign/webhook/:id - Delete a webhook
+    server.delete('/clicksign/webhook/:id', async (request: any, reply) => {
+        try {
+            const { id } = request.params;
+            await deleteWebhook(id);
+            return reply.send({ success: true, message: 'Webhook removido com sucesso.' });
+        } catch (err: any) {
+            console.error('[Webhook Delete] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ─── Consultant Dashboard Endpoints ──────────────────────────────
+    // ═══════════════════════════════════════════════════════════════════
+
+    // GET /consultant/dashboard/:consultorId - Dashboard summary
+    server.get('/consultant/dashboard/:consultorId', async (request: any, reply) => {
+        try {
+            const { consultorId } = request.params;
+
+            // Fetch consultant profile
+            const { data: profile } = await supabase
+                .from('usuarios')
+                .select('id, nome_fantasia, email, foto_perfil, empresa, codigo_user')
+                .eq('id', consultorId)
+                .single();
+
+            // Fetch consultant contracts with client names
+            const { data: contracts } = await supabase
+                .from('contratos')
+                .select('id, codigo, titulo, valor_aporte, taxa_mensal, periodo_meses, data_inicio, status, taxa_consultor, user_id')
+                .eq('consultor_id', consultorId);
+
+            // Calculate patrimônio total (sum of all contract amounts)
+            const patrimonio = (contracts || []).reduce((sum: number, c: any) => sum + (parseFloat(c.valor_aporte) || 0), 0);
+
+            // Unique clients
+            const clientIds = [...new Set((contracts || []).map((c: any) => c.user_id).filter(Boolean))];
+            let clients: any[] = [];
+            if (clientIds.length > 0) {
+                const { data: clientData } = await supabase
+                    .from('usuarios')
+                    .select('id, nome_fantasia, email')
+                    .in('id', clientIds);
+                clients = clientData || [];
+            }
+
+            // Pending commissions count via direct REST API (table name has slash)
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            const countParams = new URLSearchParams();
+            countParams.append('select', 'id');
+            countParams.append('consultor_id', `eq.${consultorId}`);
+            countParams.append('comissao_consultor', 'eq.true');
+            countParams.append('pago', 'is.null');
+
+            const countRes = await fetch(
+                `${supabaseUrl}/rest/v1/calendario%2Fpagamentos?${countParams.toString()}`,
+                {
+                    headers: {
+                        'apikey': serviceKey!,
+                        'Authorization': `Bearer ${serviceKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'count=exact'
+                    },
+                    method: 'HEAD'
+                }
+            );
+            const pendingCommissions = parseInt(countRes.headers.get('content-range')?.split('/')[1] || '0');
+
+            return reply.send({
+                profile,
+                patrimonio,
+                totalContracts: (contracts || []).length,
+                totalClients: clients.length,
+                pendingCommissions
+            });
+        } catch (err: any) {
+            console.error('[Consultant Dashboard] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // GET /consultant/contracts/:consultorId - Wallet contracts
+    server.get('/consultant/contracts/:consultorId', async (request: any, reply) => {
+        try {
+            const { consultorId } = request.params;
+
+            const { data: contracts } = await supabase
+                .from('contratos')
+                .select('id, codigo, titulo, valor_aporte, taxa_mensal, periodo_meses, data_inicio, status, taxa_consultor, user_id')
+                .eq('consultor_id', consultorId)
+                .order('created_at', { ascending: false });
+
+            // Get client names for each contract
+            const clientIds = [...new Set((contracts || []).map((c: any) => c.user_id).filter(Boolean))];
+            let clientMap: Record<string, string> = {};
+            if (clientIds.length > 0) {
+                const { data: clientData } = await supabase
+                    .from('usuarios')
+                    .select('id, nome_fantasia')
+                    .in('id', clientIds);
+                (clientData || []).forEach((c: any) => {
+                    clientMap[c.id] = c.nome_fantasia;
+                });
+            }
+
+            // Calculate end dates and enrich contracts
+            const enriched = (contracts || []).map((c: any) => {
+                const startDate = new Date(c.data_inicio);
+                const endDate = new Date(startDate);
+                endDate.setMonth(endDate.getMonth() + (c.periodo_meses || 6));
+
+                return {
+                    ...c,
+                    cliente_nome: clientMap[c.user_id] || 'N/A',
+                    data_fim: endDate.toISOString().split('T')[0],
+                    produto: c.titulo || 'Câmbio'
+                };
+            });
+
+            return reply.send({ contracts: enriched });
+        } catch (err: any) {
+            console.error('[Consultant Contracts] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // GET /consultant/commissions/:consultorId - Commissions from calendario/pagamentos
+    server.get('/consultant/commissions/:consultorId', async (request: any, reply) => {
+        try {
+            const { consultorId } = request.params;
+            const { page = '1', limit = '10' } = request.query as any;
+            const pageNum = parseInt(page);
+            const limitNum = parseInt(limit);
+            const offset = (pageNum - 1) * limitNum;
+
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            const apiHeaders = {
+                'apikey': serviceKey!,
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json'
+            };
+
+            // Get total count via HEAD request
+            const countParams = new URLSearchParams();
+            countParams.append('select', 'id');
+            countParams.append('consultor_id', `eq.${consultorId}`);
+            countParams.append('comissao_consultor', 'eq.true');
+
+            const countRes = await fetch(
+                `${supabaseUrl}/rest/v1/calendario%2Fpagamentos?${countParams.toString()}`,
+                {
+                    headers: { ...apiHeaders, 'Prefer': 'count=exact' },
+                    method: 'HEAD'
+                }
+            );
+            const totalCount = parseInt(countRes.headers.get('content-range')?.split('/')[1] || '0');
+
+            // Get paginated commissions via direct REST
+            const dataParams = new URLSearchParams();
+            dataParams.append('select', 'id,valor,data,comissao_consultor,pago,evento,contrato_id,cliente_id');
+            dataParams.append('consultor_id', `eq.${consultorId}`);
+            dataParams.append('comissao_consultor', 'eq.true');
+            dataParams.append('order', 'data.asc');
+            dataParams.append('offset', String(offset));
+            dataParams.append('limit', String(limitNum));
+
+            const dataRes = await fetch(
+                `${supabaseUrl}/rest/v1/calendario%2Fpagamentos?${dataParams.toString()}`,
+                { headers: apiHeaders }
+            );
+
+            if (!dataRes.ok) {
+                const errText = await dataRes.text();
+                console.error('[Consultant Commissions] REST Error:', errText);
+                return reply.status(500).send({ error: errText });
+            }
+
+            const commissions: any[] = await dataRes.json();
+
+            // Enrich with client names and contract codes
+            const clientIds = [...new Set(commissions.map((c: any) => c.cliente_id).filter(Boolean))];
+            const contractIds = [...new Set(commissions.map((c: any) => c.contrato_id).filter(Boolean))];
+
+            let clientMap: Record<string, string> = {};
+            let contractMap: Record<string, string> = {};
+
+            if (clientIds.length > 0) {
+                const { data: clientData } = await supabase
+                    .from('usuarios')
+                    .select('id, nome_fantasia')
+                    .in('id', clientIds);
+                (clientData || []).forEach((c: any) => { clientMap[c.id] = c.nome_fantasia; });
+            }
+
+            if (contractIds.length > 0) {
+                const { data: contractData } = await supabase
+                    .from('contratos')
+                    .select('id, codigo')
+                    .in('id', contractIds);
+                (contractData || []).forEach((c: any) => { contractMap[c.id] = c.codigo; });
+            }
+
+            const enriched = commissions.map((c: any) => ({
+                id: c.id,
+                cliente_nome: clientMap[c.cliente_id] || 'N/A',
+                codigo_contrato: contractMap[c.contrato_id] || 'N/A',
+                valor_comissao: parseFloat(c.valor) || 0,
+                data_vencimento: c.data,
+                pago: c.pago,
+                evento: c.evento
+            }));
+
+            return reply.send({
+                commissions: enriched,
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total: totalCount,
+                    totalPages: Math.ceil(totalCount / limitNum)
+                }
+            });
+        } catch (err: any) {
+            console.error('[Consultant Commissions] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // ============================================================
+    // APPROVAL FLOW ENDPOINTS
+    // ============================================================
+
+    // GET /approval/processes - List all contracts in 'Processando' status for approval
+    server.get('/approval/processes', async (request: any, reply) => {
+        try {
+            const { status: filterStatus } = request.query as { status?: string };
+
+            let query = supabase
+                .from('contratos')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            // Filter: if status provided, filter by it. Otherwise show Processando + already reviewed
+            if (filterStatus) {
+                query = query.eq('status', filterStatus);
+            } else {
+                query = query.in('status', ['Processando', 'Vigente', 'Reprovado']);
+            }
+
+            const { data: contracts, error } = await query;
+            if (error) throw error;
+
+            // Enrich with client and consultant names
+            const userIds = new Set<string>();
+            (contracts || []).forEach((c: any) => {
+                if (c.user_id) userIds.add(c.user_id);
+                if (c.consultor_id) userIds.add(c.consultor_id);
+            });
+
+            const { data: users } = await supabase
+                .from('usuarios')
+                .select('id, nome_fantasia, cpf, cnpj')
+                .in('id', Array.from(userIds));
+
+            const userMap: Record<string, any> = {};
+            (users || []).forEach((u: any) => { userMap[u.id] = u; });
+
+            const processes = (contracts || []).map((c: any) => {
+                const client = userMap[c.user_id] || {};
+                const consultant = userMap[c.consultor_id] || {};
+                return {
+                    id: c.id,
+                    clientName: client.nome_fantasia || 'N/A',
+                    consultantName: consultant.nome_fantasia || 'N/A',
+                    contractCode: c.codigo || c.id?.substring(0, 8) || '',
+                    amount: c.valor_aporte || 0,
+                    documentId: client.cpf || client.cnpj || '',
+                    status: c.aprovacao_status || 'pending',
+                    contractStatus: c.status,
+                    steps: [
+                        {
+                            id: `${c.id}-comprovante`,
+                            title: 'Comprovante anexado',
+                            description: 'Verificar se o consultor assinou o contrato de prestação de serviços',
+                            status: c.aprovacao_comprovante || 'pending',
+                            hasDocument: !!c.comprovante_url
+                        },
+                        {
+                            id: `${c.id}-perfil`,
+                            title: 'Perfil do investidor',
+                            description: 'Confirmar que o consultor completou todo o processo de verificação KYC',
+                            status: c.aprovacao_perfil || 'pending',
+                            hasDocument: true
+                        },
+                        {
+                            id: `${c.id}-assinatura`,
+                            title: 'Assinatura do contrato',
+                            description: 'Verificar se o consultor anexou todos os documentos comprobatórios necessários',
+                            status: c.aprovacao_assinatura || 'pending',
+                            hasDocument: true
+                        }
+                    ],
+                    clientId: c.user_id,
+                    consultorId: c.consultor_id,
+                    comprovante_url: c.comprovante_url,
+                    clicksign_envelope_id: c.clicksign_envelope_id
+                };
+            });
+
+            return reply.send(processes);
+        } catch (err: any) {
+            console.error('[Approval Processes] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // GET /approval/process/:contractId - Get detailed process info for a specific contract
+    server.get('/approval/process/:contractId', async (request: any, reply) => {
+        const { contractId } = request.params;
+        try {
+            const { data: contract, error } = await supabase
+                .from('contratos')
+                .select('*')
+                .eq('id', contractId)
+                .single();
+
+            if (error || !contract) {
+                return reply.status(404).send({ error: 'Contrato não encontrado.' });
+            }
+
+            // Fetch client profile
+            let clientProfile = null;
+            if (contract.user_id) {
+                const { data } = await supabase
+                    .from('usuarios')
+                    .select('*')
+                    .eq('id', contract.user_id)
+                    .single();
+                clientProfile = data;
+            }
+
+            // Fetch consultant info
+            let consultantProfile = null;
+            if (contract.consultor_id) {
+                const { data } = await supabase
+                    .from('usuarios')
+                    .select('id, nome_fantasia, email, cpf')
+                    .eq('id', contract.consultor_id)
+                    .single();
+                consultantProfile = data;
+            }
+
+            // Get Clicksign status if available
+            let clicksignStatus = null;
+            if (contract.clicksign_envelope_id) {
+                try {
+                    const envelopeDetails = await getEnvelopeDetails(contract.clicksign_envelope_id);
+                    clicksignStatus = envelopeDetails;
+                } catch (e: any) {
+                    console.warn('[Approval] Could not fetch clicksign status:', e.message);
+                }
+            }
+
+            return reply.send({
+                contract,
+                clientProfile,
+                consultantProfile,
+                clicksignStatus,
+                steps: [
+                    {
+                        id: `${contract.id}-comprovante`,
+                        title: 'Comprovante anexado',
+                        description: 'Verificar se o consultor assinou o contrato de prestação de serviços',
+                        status: contract.aprovacao_comprovante || 'pending',
+                        hasDocument: !!contract.comprovante_url
+                    },
+                    {
+                        id: `${contract.id}-perfil`,
+                        title: 'Perfil do investidor',
+                        description: 'Confirmar que o consultor completou todo o processo de verificação KYC',
+                        status: contract.aprovacao_perfil || 'pending',
+                        hasDocument: true
+                    },
+                    {
+                        id: `${contract.id}-assinatura`,
+                        title: 'Assinatura do contrato',
+                        description: 'Verificar se o consultor anexou todos os documentos comprobatórios necessários',
+                        status: contract.aprovacao_assinatura || 'pending',
+                        hasDocument: true
+                    }
+                ]
+            });
+        } catch (err: any) {
+            console.error('[Approval Process Detail] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // PATCH /approval/process/:contractId/step - Approve/Reject an individual step
+    server.patch('/approval/process/:contractId/step', async (request: any, reply) => {
+        const { contractId } = request.params;
+        const { step, status, reason: _reason } = request.body as {
+            step: 'comprovante' | 'perfil' | 'assinatura';
+            status: 'approved' | 'rejected';
+            reason?: string;
+        };
+
+        try {
+            if (!step || !status) {
+                return reply.status(400).send({ error: 'step e status são obrigatórios.' });
+            }
+
+            const columnMap: Record<string, string> = {
+                comprovante: 'aprovacao_comprovante',
+                perfil: 'aprovacao_perfil',
+                assinatura: 'aprovacao_assinatura'
+            };
+
+            const column = columnMap[step];
+            if (!column) {
+                return reply.status(400).send({ error: 'Step inválido. Use: comprovante, perfil ou assinatura.' });
+            }
+
+            const updateData: any = { [column]: status };
+
+            const { data, error } = await supabase
+                .from('contratos')
+                .update(updateData)
+                .eq('id', contractId)
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            return reply.send({
+                success: true,
+                step,
+                status,
+                contract: data
+            });
+        } catch (err: any) {
+            console.error('[Approval Step] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // PATCH /approval/process/:contractId/finalize - Approve or reject the entire process
+    server.patch('/approval/process/:contractId/finalize', async (request: any, reply) => {
+        const { contractId } = request.params;
+        const { approved, data_ativacao, observacao } = request.body as {
+            approved: boolean;
+            data_ativacao?: string;
+            observacao?: string;
+        };
+
+        try {
+            if (approved) {
+                // Activate the contract
+                const updateData: any = {
+                    status: 'Vigente',
+                    aprovacao_status: 'approved',
+                    aprovacao_data: new Date().toISOString(),
+                    aprovacao_obs: observacao || null
+                };
+
+                if (data_ativacao) {
+                    updateData.data_ativacao = data_ativacao;
+                    updateData.data_inicio = data_ativacao; // Update start date to activation date
+                }
+
+                const { data, error } = await supabase
+                    .from('contratos')
+                    .update(updateData)
+                    .eq('id', contractId)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                // Send notification to client
+                if (data?.user_id) {
+                    await supabase.from('notificacoes').insert({
+                        user_id: data.user_id,
+                        type: 'Sistema',
+                        title: 'Contrato Ativado',
+                        content: `Seu contrato "${data.titulo}" foi aprovado e ativado com sucesso.`,
+                        is_read: false
+                    });
+                }
+
+                return reply.send({ success: true, status: 'Vigente', contract: data });
+            } else {
+                // Reject the process
+                const { data, error } = await supabase
+                    .from('contratos')
+                    .update({
+                        status: 'Reprovado',
+                        aprovacao_status: 'rejected',
+                        aprovacao_data: new Date().toISOString(),
+                        aprovacao_obs: observacao || null
+                    })
+                    .eq('id', contractId)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                // Notify client
+                if (data?.user_id) {
+                    await supabase.from('notificacoes').insert({
+                        user_id: data.user_id,
+                        type: 'Sistema',
+                        title: 'Contrato Reprovado',
+                        content: `Seu contrato "${data.titulo}" foi reprovado. Motivo: ${observacao || 'Não informado'}`,
+                        is_read: false
+                    });
+                }
+
+                return reply.send({ success: true, status: 'Reprovado', contract: data });
+            }
+        } catch (err: any) {
+            console.error('[Approval Finalize] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // POST /contracts/:id/comprovante - Upload comprovante URL
+    server.post('/contracts/:id/comprovante', async (request: any, reply) => {
+        const { id } = request.params;
+        const { comprovante_url } = request.body as { comprovante_url: string };
+
+        try {
+            if (!comprovante_url) {
+                return reply.status(400).send({ error: 'comprovante_url é obrigatório.' });
+            }
+
+            const { data, error } = await supabase
+                .from('contratos')
+                .update({ comprovante_url })
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return reply.send({ success: true, contract: data });
+        } catch (err: any) {
+            return reply.status(500).send({ error: err.message });
         }
     });
 }

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Home,
   Plus,
@@ -23,6 +23,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '../../lib/supabase';
 
 type ViewMode = 'list' | 'create';
 type ClientTab = 'general' | 'address' | 'bank' | 'contracts';
@@ -40,45 +41,144 @@ const ClientsView: React.FC<ClientsViewProps> = ({ userProfile }) => {
   const [showSuccessDelete, setShowSuccessDelete] = useState(false);
   const [personType, setPersonType] = useState<'PF' | 'PJ'>('PF');
 
+  // Filter State (Replicating Admin Logic)
+  const [filters, setFilters] = useState({
+    consultant: '',
+    name: '',
+    document: ''
+  });
+
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const LIMIT = 20;
+
+  const [consultantsList, setConsultantsList] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  React.useEffect(() => {
-    const fetchClients = async () => {
-      if (!userProfile?.id) return;
+  // 1. Fetch Consultants List for Filter Dropdown
+  useEffect(() => {
+    const fetchConsultants = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants`);
+        if (res.ok) {
+          const json = await res.json();
+          const data = Array.isArray(json) ? json : (json.data || []);
+          setConsultantsList(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch consultants', error);
+      }
+    };
+    fetchConsultants();
+  }, []);
 
+  // 2. Fetch Clients with Debounce and API Query Params
+  useEffect(() => {
+    let active = true;
+    const fetchClients = async () => {
       setLoading(true);
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?consultant_id=${userProfile.id}`);
-        if (!response.ok) throw new Error('Falha ao buscar clientes');
+        const queryParams = new URLSearchParams({
+          page: page.toString(),
+          limit: LIMIT.toString(),
+          ...(filters.name && { name: filters.name }),
+          ...(filters.document && { document: filters.document }),
+          ...(filters.consultant && filters.consultant !== 'Todos' && { consultant_id: filters.consultant })
+        });
 
-        const data = await response.json();
-        const mappedClients = (data.data || []).map((c: any) => ({
-          id: c.id,
-          name: c.nome_fantasia || c.razao_social || 'Sem nome',
-          doc: c.cpf || c.cnpj || '-',
-          consult: c.meu_consultor?.consultor?.nome_fantasia || '-',
-          status: c.status_cliente || 'Apto', // Defaulting for visual
-          type: c.tipo_cliente === 'Pessoa Física' ? 'Física' : 'Jurídica'
-        }));
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?${queryParams}`);
+        if (!response.ok) throw new Error('Falha ao buscar clientes via API');
+
+        const { data: apiData, total } = await response.json();
+
+        if (!active) return;
+
+        const customerList = Array.isArray(apiData) ? apiData : [];
+        setTotalPages(Math.ceil(total / LIMIT));
+
+        // 3. Side-load Consultant Names (Manual Join for Display)
+        const clientIds = customerList.map((c: any) => c.id);
+        const relationsMap = new Map();
+
+        if (clientIds.length > 0) {
+          const { data: relationsData } = await supabase
+            .from('meu_consultor')
+            .select(`
+                cliente_id,
+                consultor:consultor_id (
+                  nome_fantasia,
+                  razao_social
+                )
+              `)
+            .in('cliente_id', clientIds);
+
+          if (relationsData) {
+            relationsData.forEach((rel: any) => {
+              relationsMap.set(rel.cliente_id, rel.consultor);
+            });
+          }
+        }
+
+        // 4. Map to View Structure
+        const mappedClients = customerList.map((c: any) => {
+          const consultor = relationsMap.get(c.id);
+          const consultName = consultor?.nome_fantasia || consultor?.razao_social || '-';
+
+          const isFisica = c.tipo_cliente === 'Pessoa Física' || c.tipo_cliente === 'PF' || !!c.cpf;
+          const doc = c.cpf || c.cnpj || '-';
+          const name = c.nome_fantasia || c.razao_social || c.nome || 'Cliente Sem Nome';
+
+          return {
+            id: c.id,
+            name: name,
+            doc: doc,
+            consult: consultName,
+            // The API might return status_cliente or status
+            status: c.status_cliente || 'Apto',
+            type: isFisica ? 'Física' : 'Jurídica'
+          };
+        });
+
         setClients(mappedClients);
-      } catch (error) {
-        console.error("Error fetching clients:", error);
+      } catch (error: any) {
+        console.error("Error fetching clients:", error.message || error);
+        if (active) setClients([]);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
-    fetchClients();
-  }, [userProfile]);
+    const timer = setTimeout(() => {
+      fetchClients();
+    }, 300); // 300ms debounce for typing
 
-  // Hardcoded clients removed in favor of state
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [filters, page]); // Re-fetch on filter or page change
 
+  const handleFilterChange = (field: string, value: string) => {
+    setFilters(prev => ({ ...prev, [field]: value }));
+    setPage(1); // Reset to page 1
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      consultant: '',
+      name: '',
+      document: ''
+    });
+    setPage(1);
+  };
 
   const StatusBadge = ({ status }: { status: string }) => {
-    const isApto = status === 'Apto';
+    // Admin uses 'Ativo' | 'Apto' for green, others logic? 
+    // Admin Logic: status_cliente === 'Apto' || 'Ativo' ? green : yellow
+    const isActive = status === 'Apto' || status === 'Ativo';
     return (
-      <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold ${isApto ? 'bg-[#E6FBF1] text-[#27C27B]' : 'bg-[#FFF5F2] text-[#FF7A59]'}`}>
+      <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-[#E6FBF1] text-[#27C27B]' : 'bg-[#FFF5F2] text-[#FF7A59]'}`}>
         {status}
       </span>
     );
@@ -133,26 +233,54 @@ const ClientsView: React.FC<ClientsViewProps> = ({ userProfile }) => {
           >
             {/* Filter Section */}
             <div className="bg-white border border-slate-100 rounded-[2rem] p-8 shadow-sm">
-              <h3 className="text-sm font-bold text-[#002B49] mb-6 uppercase tracking-wider">Pesquisar cliente</h3>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-sm font-bold text-[#002B49] uppercase tracking-wider">Pesquisar cliente</h3>
+                {(filters.name || filters.document || filters.consultant) && (
+                  <button onClick={handleResetFilters} className="text-xs font-bold text-red-400 hover:text-red-500 flex items-center gap-1">
+                    <X size={14} /> Limpar filtros
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Consultor</label>
-                  <select className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] transition-all appearance-none">
-                    <option>Todos</option>
+                  <select
+                    value={filters.consultant}
+                    onChange={(e) => handleFilterChange('consultant', e.target.value)}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] transition-all appearance-none cursor-pointer"
+                  >
+                    <option value="">Todos</option>
+                    {consultantsList.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome_fantasia || c.nome || 'Consultor'}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Nome do cliente</label>
-                  <input type="text" placeholder="Digite o nome" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]" />
+                  <input
+                    type="text"
+                    placeholder="Digite o nome"
+                    value={filters.name}
+                    onChange={(e) => handleFilterChange('name', e.target.value)}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]"
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Documento</label>
-                  <input type="text" placeholder="CPF ou CNPJ" className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]" />
+                  <input
+                    type="text"
+                    placeholder="CPF ou CNPJ"
+                    value={filters.document}
+                    onChange={(e) => handleFilterChange('document', e.target.value)}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]"
+                  />
                 </div>
-                <button className="flex items-center justify-center gap-2 h-[46px] border border-slate-200 text-[#002B49] px-6 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all">
-                  <Search size={18} />
-                  Pesquisar
-                </button>
+                {/* Search button is redundant with live search given the Admin's debounced pattern, but keeping for UI consistency if needed. Admin has live search. */}
+                <div className="h-[46px] flex items-center text-xs text-slate-400 font-bold">
+                  {loading ? 'Buscando...' : `${clients.length} resultados`}
+                </div>
               </div>
             </div>
 
@@ -170,7 +298,11 @@ const ClientsView: React.FC<ClientsViewProps> = ({ userProfile }) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {clients.map((c, i) => (
+                  {loading && clients.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-8 text-slate-400">Carregando clientes...</td></tr>
+                  ) : clients.length === 0 ? (
+                    <tr><td colSpan={6} className="text-center py-8 text-slate-400">Nenhum cliente encontrado.</td></tr>
+                  ) : clients.map((c, i) => (
                     <tr key={i} className="text-sm hover:bg-slate-50 transition-colors group">
                       <td className="px-6 py-5 text-[#002B49] font-bold">{c.name}</td>
                       <td className="px-6 py-5 text-slate-500">{c.doc}</td>
@@ -189,17 +321,21 @@ const ClientsView: React.FC<ClientsViewProps> = ({ userProfile }) => {
 
               {/* Pagination */}
               <div className="p-6 border-t border-slate-50 flex items-center justify-between">
-                <button className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[#002B49] disabled:opacity-30">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-[#002B49] disabled:opacity-30 disabled:cursor-not-allowed"
+                >
                   <ChevronLeft size={16} /> Anterior
                 </button>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, '...', 8, 9, 10].map((p, i) => (
-                    <button key={i} className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${p === 1 ? 'bg-[#F8FAFB] text-[#002B49]' : 'text-slate-400 hover:text-[#002B49]'}`}>
-                      {p}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-2 text-xs font-bold text-[#002B49]">
+                  Página {page} de {totalPages}
                 </div>
-                <button className="flex items-center gap-2 text-xs font-bold text-[#002B49] hover:underline">
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="flex items-center gap-2 text-xs font-bold text-[#002B49] hover:underline disabled:opacity-30 disabled:cursor-not-allowed disabled:no-underline"
+                >
                   Próximo <ChevronRight size={16} />
                 </button>
               </div>
@@ -283,8 +419,10 @@ const ClientsView: React.FC<ClientsViewProps> = ({ userProfile }) => {
   );
 };
 
-const Field = ({ label, placeholder, required, type = 'text', icon: Icon, error }: any) => (
-  <div className="space-y-2">
+// ... Subcomponents ...
+
+const Field = ({ label, placeholder, required, type = 'text', icon: Icon, error, className }: any) => (
+  <div className={`space-y-2 ${className}`}>
     <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">
       {label}{required && <span className="text-[#00A3B1] ml-1">*</span>}
     </label>
@@ -623,7 +761,7 @@ const ContractsTab = () => (
   </div>
 );
 
-// High Fidelity Modals
+// High Fidelity Modals (DeleteModal, SuccessDeleteModal, DataAlertModal)
 const DeleteModal = ({ isOpen, onClose, onConfirm }: any) => {
   if (!isOpen) return null;
   return (

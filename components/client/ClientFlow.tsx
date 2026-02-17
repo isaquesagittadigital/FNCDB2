@@ -53,7 +53,7 @@ const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout, userProfile }) => {
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <ClientDashboard />;
-            case 'calendar': return <CalendarView />;
+            case 'calendar': return <CalendarView role="client" userId={userProfile?.id} />;
             case 'notifications': return <NotificationsView />;
 
             case 'documents': return <DocumentsView userProfile={userProfile} />;

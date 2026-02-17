@@ -1,10 +1,14 @@
-
-import React, { useState } from 'react';
-import { Home, Search, Eye, FileSearch, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Home, Search, Eye, FileSearch } from 'lucide-react';
 import InvestorFormDocument from './documents/InvestorFormDocument';
+import ContractDetailsModal from './documents/ContractDetailsModal';
+import { supabase } from '../../lib/supabase';
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => (
-  <span className="bg-[#E6F6F7] text-[#00A3B1] text-[10px] font-bold px-4 py-1.5 rounded-full whitespace-nowrap">
+  <span className={`text-[10px] font-bold px-4 py-1.5 rounded-full whitespace-nowrap ${status === 'Vigente' || status === 'Ativo' ? 'bg-[#E6F6F7] text-[#00A3B1]' :
+      status === 'Pendente' ? 'bg-amber-50 text-amber-600' :
+        'bg-slate-100 text-slate-500'
+    }`}>
     {status}
   </span>
 );
@@ -15,21 +19,70 @@ interface DocumentsViewProps {
 
 const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
   const [isInvestorFormOpen, setIsInvestorFormOpen] = useState(false);
+  const [isContractDetailsOpen, setIsContractDetailsOpen] = useState(false);
+  const [selectedContract, setSelectedContract] = useState<any>(null);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const documents = [
-    { id: '23042849', status: 'Vigente', product: '0001 - Câmbio', amount: 'R$ 30.000,00', yield: '2,00%', period: '6 meses', startDate: '12/01/2026', endDate: '12/07/2026' },
-    { id: '59308877', status: 'Vigente', product: '0001 - Câmbio', amount: 'R$ 51.000,00', yield: '1,50%', period: '12 meses', startDate: '21/12/2025', endDate: '21/12/2026' },
-  ];
+  useEffect(() => {
+    const fetchContracts = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (user) {
+          const { data: contractsData } = await supabase
+            .from('contratos')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+          if (contractsData) {
+            const formattedDocs = contractsData.map(contract => {
+              const startDate = new Date(contract.data_inicio || contract.created_at);
+              const endDate = new Date(startDate);
+              if (contract.periodo_meses) {
+                endDate.setMonth(endDate.getMonth() + contract.periodo_meses);
+              } else {
+                endDate.setFullYear(endDate.getFullYear() + 1);
+              }
+
+              return {
+                id: contract.id,
+                displayId: contract.codigo || contract.id.substring(0, 8).toUpperCase(),
+                status: contract.status || 'Pendente',
+                product: contract.titulo || 'Contrato Padrão',
+                amount: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contract.valor_aporte || 0),
+                yield: contract.taxa_mensal ? `${contract.taxa_mensal}%` : '-',
+                period: contract.periodo_meses ? `${contract.periodo_meses} meses` : '-',
+                startDate: startDate.toLocaleDateString('pt-BR'),
+                endDate: endDate.toLocaleDateString('pt-BR'),
+                // Pass raw data for modal usage
+                raw: contract,
+                consultor_id: contract.consultor_id,
+                codigo_externo: contract.codigo_externo,
+                start_date_raw: startDate // Helper for calculations
+              };
+            });
+            setDocuments(formattedDocs);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching contracts:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchContracts();
+  }, []);
 
   const getInvestorProfileData = () => {
-    // In a real scenario, fetch this from backend or use the userProfile
-    // For now, mocking based on userProfile if available
     const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
     return {
       name: userProfile?.nome_fantasia || userProfile?.razao_social || userProfile?.nome || 'Nome do Cliente',
       document: userProfile?.cnpj || userProfile?.cpf || '000.000.000-00',
-      nationality: 'Brasileira', // Mock or from profile
+      nationality: 'Brasileira',
       maritalStatus: userProfile?.estado_civil || 'Solteiro(a)',
       profession: userProfile?.profissao || 'Não informado',
       birthDate: userProfile?.data_nascimento || '00/00/0000',
@@ -42,7 +95,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
       email: userProfile?.email || 'email@exemplo.com',
       phone: userProfile?.telefone || '(00) 00000-0000',
       bankDetails: {
-        bank: '001 - Banco do Brasil S.A.', // Mock
+        bank: '001 - Banco do Brasil S.A.',
         agency: '0000-1',
         account: '0000-0',
         holder: userProfile?.nome || 'Titular',
@@ -54,6 +107,11 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
   };
 
   const investorData = getInvestorProfileData();
+
+  const handleContractClick = (contract: any) => {
+    setSelectedContract(contract);
+    setIsContractDetailsOpen(true);
+  };
 
   return (
     <div className="max-w-full space-y-10">
@@ -98,22 +156,40 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {documents.map((doc) => (
-                  <tr key={doc.id} className="text-sm hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-5">
-                      <button className="text-[#002B49] font-bold underline decoration-[#00A3B1]/30 hover:decoration-[#00A3B1] transition-all">
-                        {doc.id}
-                      </button>
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-10 text-center text-slate-400 text-sm">
+                      Carregando documentos...
                     </td>
-                    <td className="px-6 py-5"><StatusBadge status={doc.status} /></td>
-                    <td className="px-6 py-5 text-[#002B49] font-medium">{doc.product}</td>
-                    <td className="px-6 py-5 text-[#002B49] font-bold">{doc.amount}</td>
-                    <td className="px-6 py-5 text-[#002B49] font-medium">{doc.yield}</td>
-                    <td className="px-6 py-5 text-[#002B49] font-medium">{doc.period}</td>
-                    <td className="px-6 py-5 text-[#64748B]">{doc.startDate}</td>
-                    <td className="px-6 py-5 text-[#64748B]">{doc.endDate}</td>
                   </tr>
-                ))}
+                ) : documents.length > 0 ? (
+                  documents.map((doc) => (
+                    <tr
+                      key={doc.id}
+                      className="text-sm hover:bg-slate-50 transition-colors cursor-pointer group"
+                      onClick={() => handleContractClick(doc)}
+                    >
+                      <td className="px-6 py-5">
+                        <button className="text-[#002B49] font-bold underline decoration-[#00A3B1]/30 group-hover:decoration-[#00A3B1] transition-all" title={doc.id}>
+                          {doc.displayId}
+                        </button>
+                      </td>
+                      <td className="px-6 py-5"><StatusBadge status={doc.status} /></td>
+                      <td className="px-6 py-5 text-[#002B49] font-medium">{doc.product}</td>
+                      <td className="px-6 py-5 text-[#002B49] font-bold">{doc.amount}</td>
+                      <td className="px-6 py-5 text-[#002B49] font-medium">{doc.yield}</td>
+                      <td className="px-6 py-5 text-[#002B49] font-medium">{doc.period}</td>
+                      <td className="px-6 py-5 text-[#64748B]">{doc.startDate}</td>
+                      <td className="px-6 py-5 text-[#64748B]">{doc.endDate}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-10 text-center text-slate-400 text-sm">
+                      Nenhum documento encontrado.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -167,6 +243,14 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
         <InvestorFormDocument
           data={investorData}
           onClose={() => setIsInvestorFormOpen(false)}
+        />
+      )}
+
+      {selectedContract && isContractDetailsOpen && (
+        <ContractDetailsModal
+          contract={selectedContract}
+          onClose={() => setIsContractDetailsOpen(false)}
+          userProfile={userProfile || investorData}
         />
       )}
 

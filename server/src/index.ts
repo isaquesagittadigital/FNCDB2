@@ -21,9 +21,11 @@ server.register(cors, {
 // Routes
 import { authRoutes } from './routes/auth.routes';
 import { adminRoutes } from './routes/admin.routes';
+import { webhookRoutes } from './routes/webhook.routes';
 
 server.register(authRoutes, { prefix: '/api' });
 server.register(adminRoutes, { prefix: '/api/admin' });
+server.register(webhookRoutes, { prefix: '/api' });
 
 // Routes
 server.get('/health', async (_request, _reply) => {

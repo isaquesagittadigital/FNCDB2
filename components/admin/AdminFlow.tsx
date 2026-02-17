@@ -28,82 +28,6 @@ import InvoicesView from './invoices/InvoicesView';
 import EmptyState from '../shared/ui/EmptyState';
 import { adminMenu } from './menu';
 
-// Mock Data
-const MOCK_PROCESSES: ApprovalProcess[] = [
-    {
-        id: '1',
-        clientName: 'Isaque testes da silva',
-        consultantName: 'Samuel Alves',
-        contractCode: '23042849',
-        amount: 30000,
-        documentId: '047.253.905-18',
-        status: 'approved',
-        steps: [
-            { id: '1-1', title: 'Comprovante anexado', description: 'Verificar se o consultor assinou o contrato de prestação de serviços', status: 'approved', hasDocument: true },
-            { id: '1-2', title: 'Perfil do investidor', description: 'Confirmar que o consultor completou todo o processo de verificação KYC', status: 'approved', hasDocument: true },
-            { id: '1-3', title: 'Assinatura do contrato', description: 'Verificar se o consultor anexou todos os documentos comprobatórios necessários', status: 'approved', hasDocument: true }
-        ]
-    },
-    {
-        id: '2',
-        clientName: 'Samuel Alves de Souza',
-        consultantName: 'Ricardo Ricchini Contesini',
-        contractCode: '15388767',
-        amount: 49000,
-        documentId: '416.255.138-36',
-        status: 'approved',
-        steps: []
-    },
-    {
-        id: '3',
-        clientName: 'Samuel Alves de Souza',
-        consultantName: 'Renan Furlan Rigo 4',
-        contractCode: '17900772',
-        amount: 10000,
-        documentId: '416.255.138-36',
-        status: 'pending',
-        steps: [
-            { id: '3-1', title: 'Comprovante anexado', description: 'Verificar se o consultor assinou o contrato de prestação de serviços', status: 'pending', hasDocument: true },
-            { id: '3-2', title: 'Perfil do investidor', description: 'Confirmar que o consultor completou todo o processo de verificação KYC', status: 'approved', hasDocument: true },
-            { id: '3-3', title: 'Assinatura do contrato', description: 'Verificar se o consultor anexou todos os documentos comprobatórios necessários', status: 'pending', hasDocument: true }
-        ]
-    },
-    {
-        id: '4',
-        clientName: 'Renan Furlan Rigo',
-        consultantName: 'Renan Furlan Rigo 4',
-        contractCode: '65119068',
-        amount: 10000,
-        documentId: '345.255.618-23',
-        status: 'approved',
-        steps: []
-    },
-    {
-        id: '5',
-        clientName: 'Carlos Casa Nova',
-        consultantName: 'Jacson Daniel de Almeida dos Santos',
-        contractCode: '05515482',
-        amount: 51000,
-        documentId: '047.253.905-79',
-        status: 'approved',
-        steps: []
-    },
-    {
-        id: '6',
-        clientName: 'Samuel Alves de Souza',
-        consultantName: 'Samuel Alves',
-        contractCode: '58022482',
-        amount: 50000,
-        documentId: '416.255.138-36',
-        status: 'pending',
-        steps: [
-            { id: '6-1', title: 'Comprovante anexado', description: 'Verificar se o consultor assinou o contrato de prestação de serviços', status: 'pending', hasDocument: true },
-            { id: '6-2', title: 'Perfil do investidor', description: 'Confirmar que o consultor completou todo o processo de verificação KYC', status: 'pending', hasDocument: true },
-            { id: '6-3', title: 'Assinatura do contrato', description: 'Verificar se o consultor anexou todos os documentos comprobatórios necessários', status: 'pending', hasDocument: true }
-        ]
-    }
-];
-
 interface AdminFlowProps {
     onLogout: () => void;
     onOpenSimulator?: () => void;
@@ -112,36 +36,100 @@ interface AdminFlowProps {
 
 const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userProfile }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
-    const [processes, setProcesses] = useState<ApprovalProcess[]>(MOCK_PROCESSES);
+    const [processes, setProcesses] = useState<ApprovalProcess[]>([]);
     const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
+    const [loadingProcesses, setLoadingProcesses] = useState(false);
+
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
+
+    // Fetch approval processes from API
+    const fetchProcesses = async () => {
+        setLoadingProcesses(true);
+        try {
+            const res = await fetch(`${API_URL}/admin/approval/processes`);
+            if (!res.ok) throw new Error('Falha ao buscar processos');
+            const data = await res.json();
+            setProcesses(Array.isArray(data) ? data : []);
+        } catch (err) {
+            console.error('[AdminFlow] Error fetching processes:', err);
+        } finally {
+            setLoadingProcesses(false);
+        }
+    };
+
+    // Fetch processes when approval tab is selected
+    React.useEffect(() => {
+        if (activeTab === 'approval') {
+            fetchProcesses();
+        }
+    }, [activeTab]);
 
     const handleViewDetails = (process: ApprovalProcess) => {
         setSelectedProcessId(process.id);
     };
 
-    const handleUpdateStepStatus = (stepId: string, status: 'approved' | 'rejected', reason?: string) => {
-        setProcesses(prev => prev.map(p => {
-            if (p.id === selectedProcessId) {
-                return {
-                    ...p,
-                    steps: p.steps.map(s => s.id === stepId ? { ...s, status, rejectionReason: reason } : s)
-                };
-            }
-            return p;
-        }));
+    const handleUpdateStepStatus = async (stepId: string, status: 'approved' | 'rejected', reason?: string) => {
+        // stepId format: "<contractId>-<stepType>"
+        const parts = stepId.split('-');
+        const stepType = parts[parts.length - 1]; // comprovante, perfil, or assinatura
+        const contractId = selectedProcessId;
+
+        if (!contractId) return;
+
+        try {
+            const res = await fetch(`${API_URL}/admin/approval/process/${contractId}/step`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ step: stepType, status, reason })
+            });
+
+            if (!res.ok) throw new Error('Falha ao atualizar step');
+
+            // Update local state
+            setProcesses(prev => prev.map(p => {
+                if (p.id === contractId) {
+                    return {
+                        ...p,
+                        steps: p.steps.map(s => s.id === stepId ? { ...s, status, rejectionReason: reason } : s)
+                    };
+                }
+                return p;
+            }));
+        } catch (err) {
+            console.error('[AdminFlow] Error updating step:', err);
+            alert('Erro ao atualizar etapa. Tente novamente.');
+        }
     };
 
-    const handleFinalizeProcess = (approved: boolean) => {
-        setProcesses(prev => prev.map(p => {
-            if (p.id === selectedProcessId) {
-                return {
-                    ...p,
-                    status: approved ? 'approved' : 'rejected'
-                };
-            }
-            return p;
-        }));
-        setSelectedProcessId(null); // Go back to list
+    const handleFinalizeProcess = async (approved: boolean, data_ativacao?: string, observacao?: string) => {
+        const contractId = selectedProcessId;
+        if (!contractId) return;
+
+        try {
+            const res = await fetch(`${API_URL}/admin/approval/process/${contractId}/finalize`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ approved, data_ativacao, observacao })
+            });
+
+            if (!res.ok) throw new Error('Falha ao finalizar processo');
+
+            // Update local state
+            setProcesses(prev => prev.map(p => {
+                if (p.id === contractId) {
+                    return {
+                        ...p,
+                        status: approved ? 'approved' : 'rejected',
+                        contractStatus: approved ? 'Vigente' : 'Reprovado'
+                    };
+                }
+                return p;
+            }));
+            setSelectedProcessId(null);
+        } catch (err) {
+            console.error('[AdminFlow] Error finalizing process:', err);
+            alert('Erro ao finalizar processo. Tente novamente.');
+        }
     };
 
     const renderContent = () => {
@@ -219,7 +207,7 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
                 );
             case 'administrators':
                 return <UsersView />;
-            case 'calendar': return <CalendarView />;
+            case 'calendar': return <CalendarView role="admin" />;
             case 'notifications': return <NotificationsView />;
             case 'documents': return <DocumentsView />;
             case 'profile': return <ProfileView />;
@@ -246,6 +234,7 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
                 avatarUrl: userProfile?.foto_perfil || userProfile?.avatar_url
             }}
             onLogout={onLogout}
+            sidebarTheme="light"
         >
             {renderContent()}
         </DashboardLayout>

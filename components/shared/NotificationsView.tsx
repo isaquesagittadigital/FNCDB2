@@ -1,40 +1,85 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home, Trash2 } from 'lucide-react';
 import NotificationDetailModal from './modals/NotificationDetailModal';
+import { supabase } from '../../lib/supabase';
 
 interface Notification {
   id: number;
   title: string;
   content: string;
-  isNew: boolean;
-  isRead: boolean;
+  is_read: boolean;
+  created_at: string;
 }
 
 const NotificationsView: React.FC = () => {
   const [filter, setFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [notifications, setNotifications] = useState<Notification[]>([
-    { id: 1, title: 'Título da notificação', content: 'Conteúdo da notificação', isNew: true, isRead: false },
-    { id: 2, title: 'Título da notificação', content: 'Conteúdo da notificação', isNew: true, isRead: false },
-    { id: 3, title: 'Título da notificação', content: 'Conteúdo da notificação', isNew: false, isRead: true },
-  ]);
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
 
-  const filteredNotifications = notifications.filter(n => {
-    if (filter === 'unread') return !n.isRead;
-    if (filter === 'read') return n.isRead;
-    return true;
-  });
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-  const clearNotifications = () => {
-    if (confirm('Deseja limpar todas as notificações?')) {
-      setNotifications([]);
+      const { data, error } = await supabase
+        .from('notificacoes')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      if (data) setNotifications(data);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const markAsRead = (id: number) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true, isNew: false } : n));
+  const filteredNotifications = notifications.filter(n => {
+    if (filter === 'unread') return !n.is_read;
+    if (filter === 'read') return n.is_read;
+    return true;
+  });
+
+  const clearNotifications = async () => {
+    if (confirm('Deseja limpar todas as notificações?')) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { error } = await supabase
+          .from('notificacoes')
+          .delete()
+          .eq('user_id', user.id); // Delete all for this user
+
+        if (error) throw error;
+        setNotifications([]);
+      } catch (error) {
+        console.error('Error clearing notifications:', error);
+      }
+    }
+  };
+
+  const markAsRead = async (id: number) => {
+    // Optimistic update
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+
+    try {
+      await supabase
+        .from('notificacoes')
+        .update({ is_read: true })
+        .eq('id', id);
+    } catch (error) {
+      console.error('Error marking as read:', error);
+    }
   };
 
   return (
@@ -85,20 +130,25 @@ const NotificationsView: React.FC = () => {
       </div>
 
       <div className="space-y-4">
-        {filteredNotifications.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-10 text-slate-400">Carregando...</div>
+        ) : filteredNotifications.length > 0 ? (
           filteredNotifications.map((notification) => (
             <div
               key={notification.id}
-              className="bg-white border border-[#E6F6F7] rounded-2xl p-6 flex items-center justify-between shadow-sm hover:shadow-md transition-all group"
+              className={`bg-white border rounded-2xl p-6 flex items-center justify-between shadow-sm hover:shadow-md transition-all group ${!notification.is_read ? 'border-[#E6F6F7] bg-slate-50' : 'border-slate-100'}`}
             >
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  {notification.isNew && (
+                  {!notification.is_read && (
                     <span className="bg-[#E6F6F7] text-[#00A3B1] text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
                       Novo
                     </span>
                   )}
                   <h4 className="text-sm font-bold text-[#002B49]">{notification.title}</h4>
+                  <span className="text-[10px] text-slate-400 ml-2">
+                    {new Date(notification.created_at).toLocaleDateString()} {new Date(notification.created_at).toLocaleTimeString().slice(0, 5)}
+                  </span>
                 </div>
                 <p className="text-xs text-[#64748B] font-medium">{notification.content}</p>
               </div>
@@ -106,9 +156,9 @@ const NotificationsView: React.FC = () => {
               <button
                 onClick={() => {
                   setSelectedNotification(notification);
-                  markAsRead(notification.id);
+                  if (!notification.is_read) markAsRead(notification.id);
                 }}
-                className="text-xs font-bold text-[#00A3B1] hover:underline"
+                className="text-xs font-bold text-[#00A3B1] hover:underline whitespace-nowrap ml-4"
               >
                 Ver notificação
               </button>

@@ -21,6 +21,7 @@ import ApprovalsView from './ApprovalsView';
 import ClientsView from './ClientsView';
 import ContractsView from './ContractsView';
 import InvoicesView from './InvoicesView';
+import Simulator from '../admin/simulator/Simulator';
 
 import CalendarView from '../shared/CalendarView';
 import NotificationsView from '../shared/NotificationsView';
@@ -32,21 +33,22 @@ import { consultantMenu } from './menu';
 interface ConsultantFlowProps {
     onLogout: () => void;
     userProfile?: any;
+    onOpenSimulator?: () => void;
 }
 
-const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile }) => {
+const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile, onOpenSimulator }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
 
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <ConsultantDashboard userProfile={userProfile} />;
+            case 'simulator': return <Simulator onOpen={onOpenSimulator} />;
             case 'approval': return <ApprovalsView />;
             case 'clients': return <ClientsView userProfile={userProfile} />;
             case 'contracts': return <ContractsView userProfile={userProfile} />;
-            case 'invoice': return <InvoicesView />;
-            case 'calendar': return <CalendarView />;
+            case 'invoice': return <InvoicesView userProfile={userProfile} />;
+            case 'calendar': return <CalendarView role="consultant" userId={userProfile?.id} />;
             case 'notifications': return <NotificationsView />;
-            case 'documents': return <DocumentsView />;
             case 'profile': return <ProfileView />;
             default:
                 return (
@@ -68,6 +70,7 @@ const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile }
                 avatarUrl: userProfile?.foto_perfil || userProfile?.avatar_url
             }}
             onLogout={onLogout}
+            sidebarTheme="light"
         >
             {renderContent()}
         </DashboardLayout>

@@ -29,6 +29,7 @@ interface SidebarProps {
     onLogout: () => void;
     isOpen: boolean;
     onToggle: () => void;
+    theme?: 'light' | 'dark';
 }
 
 const NavItem: React.FC<{
@@ -36,20 +37,31 @@ const NavItem: React.FC<{
     isSub?: boolean,
     activeTab: string,
     isOpen: boolean,
-    onTabChange: (id: string) => void
-}> = ({ item, isSub = false, activeTab, isOpen, onTabChange }) => {
+    onTabChange: (id: string) => void,
+    theme: 'light' | 'dark'
+}> = ({ item, isSub = false, activeTab, isOpen, onTabChange, theme }) => {
     const Icon = item.icon;
     const isActive = activeTab === item.id;
+
+    const baseClasses = "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all";
+    const activeClasses = theme === 'light'
+        ? 'bg-[#E6F6F7] text-[#00A3B1] font-bold shadow-sm'
+        : 'bg-[#003B63] text-[#00A3B1] font-bold shadow-md shadow-black/20';
+
+    const inactiveClasses = theme === 'light'
+        ? 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 font-medium'
+        : 'text-slate-300 hover:bg-white/5 hover:text-white font-medium';
+
+    const iconColor = isActive
+        ? 'text-[#00A3B1]'
+        : (theme === 'light' ? 'text-slate-400 group-hover:text-slate-600' : 'text-slate-400 group-hover:text-white');
 
     return (
         <button
             onClick={() => onTabChange(item.id)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${isActive
-                ? 'bg-[#E6F6F7] text-[#00A3B1] font-bold shadow-sm'
-                : 'text-[#64748B] hover:bg-slate-50 font-medium'
-                } ${isSub ? 'pl-10 text-xs' : ''}`}
+            className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses} ${isSub ? 'pl-10 text-xs' : ''}`}
         >
-            <Icon size={isSub ? 16 : 20} className={isActive ? 'text-[#00A3B1]' : 'text-[#64748B]'} />
+            <Icon size={isSub ? 16 : 20} className={iconColor} />
             {isOpen && <span className="truncate">{item.label}</span>}
         </button>
     );
@@ -61,8 +73,9 @@ const NavGroup: React.FC<{
     isOpen: boolean,
     onTabChange: (id: string) => void,
     expandedMenus: Record<string, boolean>,
-    toggleMenu: (id: string) => void
-}> = ({ item, activeTab, isOpen, onTabChange, expandedMenus, toggleMenu }) => {
+    toggleMenu: (id: string) => void,
+    theme: 'light' | 'dark'
+}> = ({ item, activeTab, isOpen, onTabChange, expandedMenus, toggleMenu, theme }) => {
     const Icon = item.icon;
 
     const isParentActive = (item: SidebarItem) => {
@@ -72,15 +85,31 @@ const NavGroup: React.FC<{
 
     const hasActiveChild = isParentActive(item);
 
+    const baseGroupClasses = "w-full flex items-center justify-between px-3 py-2.5 font-medium rounded-xl group transition-all";
+
+    // For parent item, if light theme:
+    // Active child logic: Maybe bold text or subtle bg?
+    // In dark theme it was 'text-white bg-white/10'
+    const activeGroupClasses = theme === 'light'
+        ? 'text-[#00A3B1] bg-[#E6F6F7]'
+        : 'text-white bg-white/10';
+
+    const inactiveGroupClasses = theme === 'light'
+        ? 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+        : 'text-slate-300 hover:bg-white/5 hover:text-white';
+
+    const iconColor = hasActiveChild
+        ? 'text-[#00A3B1]'
+        : (theme === 'light' ? 'text-slate-400 group-hover:text-slate-600' : 'text-slate-400 group-hover:text-white');
+
     return (
         <div className="space-y-1">
             <button
                 onClick={() => toggleMenu(item.id)}
-                className={`w-full flex items-center justify-between px-3 py-2.5 text-[#64748B] hover:bg-slate-50 font-medium rounded-xl group transition-all ${hasActiveChild ? 'text-[#002B49] bg-slate-50' : ''
-                    }`}
+                className={`${baseGroupClasses} ${hasActiveChild ? activeGroupClasses : inactiveGroupClasses}`}
             >
                 <div className="flex items-center gap-3">
-                    <Icon size={20} className={hasActiveChild ? 'text-[#00A3B1]' : 'text-[#64748B]'} />
+                    <Icon size={20} className={iconColor} />
                     {isOpen && <span>{item.label}</span>}
                 </div>
                 {isOpen && (
@@ -100,6 +129,7 @@ const NavGroup: React.FC<{
                             activeTab={activeTab}
                             isOpen={isOpen}
                             onTabChange={onTabChange}
+                            theme={theme}
                         />
                     ))}
                 </div>
@@ -115,7 +145,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     user,
     onLogout,
     isOpen,
-    onToggle
+    onToggle,
+    theme = 'dark' // Default to dark for backward compatibility
 }) => {
     const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
     const { hasPermission } = usePermissions();
@@ -129,15 +160,31 @@ const Sidebar: React.FC<SidebarProps> = ({
         setExpandedMenus(prev => ({ ...prev, [menuId]: !prev[menuId] }));
     };
 
+    const asideClasses = theme === 'light'
+        ? 'bg-white border-r border-[#E2E8F0]'
+        : 'bg-[#002B49] border-r border-slate-800/50';
+
+    const logo = isOpen
+        ? <LogoFull dark={theme === 'light' ? true : false} /> // Dark logo (black text) on light bg
+        : <LogoIcon dark={theme === 'light' ? true : false} className="w-8 h-8" />;
+
+    const toggleButtonClasses = theme === 'light'
+        ? 'bg-[#00A3B1] border-2 border-white hover:bg-[#008c99]'
+        : 'bg-[#00A3B1] border-2 border-[#002B49] hover:bg-[#008c99]';
+
+    const profileCardClasses = theme === 'light'
+        ? 'bg-white border border-slate-200 shadow-sm hover:bg-slate-50'
+        : 'bg-white p-2 border border-slate-200 shadow-sm'; // Kept original style for dark mode (white card on dark bg)
+
     return (
-        <aside className={`bg-white border-r border-slate-100 transition-all duration-300 flex flex-col relative z-30 ${isOpen ? 'w-64' : 'w-20'}`}>
+        <aside className={`${asideClasses} transition-all duration-300 flex flex-col relative z-30 ${isOpen ? 'w-64' : 'w-20'}`}>
             <div className={`h-20 px-6 flex items-center ${isOpen ? 'justify-start' : 'justify-center'}`}>
-                {isOpen ? <LogoFull dark={true} /> : <LogoIcon dark={true} className="w-8 h-8" />}
+                {logo}
             </div>
 
             <button
                 onClick={onToggle}
-                className={`absolute -right-3 top-7 z-50 w-7 h-7 bg-[#00A3B1] rounded-full flex items-center justify-center text-white shadow-lg border-2 border-white hover:bg-[#008c99] transition-all transform ${!isOpen && 'rotate-180'}`}
+                className={`absolute -right-3 top-7 z-50 w-7 h-7 rounded-full flex items-center justify-center text-white shadow-lg transition-all transform ${!isOpen && 'rotate-180'} ${toggleButtonClasses}`}
             >
                 <ChevronLeft size={16} strokeWidth={3} />
             </button>
@@ -158,6 +205,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             onTabChange={onTabChange}
                             expandedMenus={expandedMenus}
                             toggleMenu={toggleMenu}
+                            theme={theme}
                         />
                     ) : (
                         <NavItem
@@ -166,13 +214,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                             activeTab={activeTab}
                             isOpen={isOpen}
                             onTabChange={onTabChange}
+                            theme={theme}
                         />
                     );
                 })}
             </nav>
 
-            <div className="p-4 border-t border-slate-100">
-                <div className={`flex items-center gap-3 bg-white p-2 rounded-xl border border-slate-100 shadow-sm ${!isOpen && 'justify-center'}`}>
+            <div className={`p-4 border-t ${theme === 'light' ? 'border-slate-100' : 'border-white/10'}`}>
+                <div className={`flex items-center gap-3 p-2 rounded-xl transition-colors ${!isOpen && 'justify-center'} ${profileCardClasses}`}>
                     <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200">
                         {user.avatarUrl ? (
                             <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />

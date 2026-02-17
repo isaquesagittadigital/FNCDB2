@@ -16,6 +16,7 @@ interface DashboardLayoutProps {
   };
   onLogout: () => void;
   children: ReactNode;
+  sidebarTheme?: 'light' | 'dark';
 }
 
 const DashboardLayout: React.FC<DashboardLayoutProps> = ({
@@ -24,7 +25,8 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   onTabChange,
   user,
   onLogout,
-  children
+  children,
+  sidebarTheme = 'dark'
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -38,6 +40,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
         onLogout={onLogout}
         isOpen={isSidebarOpen}
         onToggle={() => setIsSidebarOpen(!isSidebarOpen)}
+        theme={sidebarTheme}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden relative">

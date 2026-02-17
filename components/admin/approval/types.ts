@@ -18,5 +18,10 @@ export interface ApprovalProcess {
     amount: number;
     documentId: string;
     status: ApprovalStatus;
+    contractStatus?: string;
     steps: ProcessStep[];
+    clientId?: string;
+    consultorId?: string;
+    comprovante_url?: string;
+    clicksign_envelope_id?: string;
 }

@@ -11,13 +11,14 @@ import {
     FileSpreadsheet,
     BarChart3,
     Briefcase,
-    FolderOpen
+    FolderOpen,
+    LayoutGrid
 } from 'lucide-react';
 import { SidebarItem } from '../layout/Sidebar';
 
 export const consultantMenu: SidebarItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'documents', label: 'Meus documentos', icon: FolderOpen },
+    { id: 'simulator', label: 'Simulador', icon: LayoutGrid },
     { id: 'approval', label: 'Aprovação', icon: CheckCircle2 },
     {
         id: 'cadastros',
