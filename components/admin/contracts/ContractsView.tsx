@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Plus, Home, ChevronRight, Search, Trash2, Edit2, ArrowUpDown } from 'lucide-react';
+import { Plus, Home, ChevronRight, Search, Trash2, Edit2, ArrowUpDown, Eye } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ContractForm from './ContractForm';
+import ContractDetailModal from '../../shared/ContractDetailModal';
 
 const ContractsView = () => {
     // Mock data based on the image provided
@@ -9,6 +10,7 @@ const ContractsView = () => {
     const [loading, setLoading] = useState(false);
     const [viewMode, setViewMode] = useState<'list' | 'create' | 'edit'>('list');
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [selectedContract, setSelectedContract] = useState<any>(null);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [clientTerm, setClientTerm] = useState('');
@@ -264,8 +266,15 @@ const ContractsView = () => {
                                 <div className="col-span-1 text-right text-slate-500 relative flex items-center justify-end gap-2">
                                     <span>{formatDate(contract.data_fim)}</span>
                                     <button
+                                        onClick={() => setSelectedContract(contract)}
+                                        className="text-slate-300 hover:text-cyan-600 transition-colors opacity-0 group-hover:opacity-100"
+                                        title="Ver contrato"
+                                    >
+                                        <Eye size={16} />
+                                    </button>
+                                    <button
                                         onClick={() => handleDelete(contract.id)}
-                                        className="ml-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                        className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                                         title="Excluir"
                                     >
                                         <Trash2 size={16} />
@@ -275,7 +284,7 @@ const ContractsView = () => {
                                         className="text-slate-300 hover:text-cyan-600 transition-colors opacity-0 group-hover:opacity-100"
                                         title="Editar"
                                     >
-                                        <Edit2 size={16} /> {/* Assuming Edit2 is imported? Need to check imports */}
+                                        <Edit2 size={16} />
                                     </button>
                                 </div>
                             </div>
@@ -283,6 +292,14 @@ const ContractsView = () => {
                     )}
                 </div>
             </motion.div>
+
+            {/* Contract Detail Modal */}
+            {selectedContract && (
+                <ContractDetailModal
+                    contract={selectedContract}
+                    onClose={() => setSelectedContract(null)}
+                />
+            )}
         </div>
     );
 };

@@ -11,6 +11,7 @@
  */
 
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { generateFullContractPdf } from './contract-template';
 
 const CLICKSIGN_BASE_URL = 'https://sandbox.clicksign.com/api/v3';
 
@@ -160,34 +161,44 @@ export async function addSigner(
         birthday = '1990-01-01';
     }
 
-    // Format phone number for Clicksign: +55XXXXXXXXXXX
+    // Format phone number for Clicksign: +55XXXXXXXXXXX (exactly 13 chars)
     let phoneNumber: string | undefined;
     if (opts.phone) {
-        const digits = opts.phone.replace(/\D/g, '').replace(/^55/, '');
-        if (digits.length >= 10) {
+        // Strip everything except digits, remove leading country code 55
+        let digits = opts.phone.replace(/\D/g, '');
+        if (digits.startsWith('55') && digits.length >= 12) {
+            digits = digits.substring(2);
+        }
+        // Must be 10 or 11 digits (DDD + number)
+        if (digits.length === 10 || digits.length === 11) {
             phoneNumber = `+55${digits}`;
+        } else {
+            console.warn(`[Clicksign] Phone '${opts.phone}' has ${digits.length} digits, expected 10-11. Skipping phone.`);
         }
     }
 
     const method = opts.deliveryMethod || 'email';
     const needsPhone = method === 'whatsapp' || method === 'sms';
 
+    // Determine actual delivery: fall back to email if phone method lacks valid number
+    let actualMethod = method;
+    if (needsPhone && !phoneNumber) {
+        console.warn(`[Clicksign] Delivery method is ${method} but no valid phone number provided, falling back to email`);
+        actualMethod = 'email';
+    }
+
     const attributes: any = {
         name: opts.name,
         email: opts.email,
         documentation: formatCpf(opts.cpf),
         birthday,
-        communicate_events: ['signature_request'],
+        communicate_events: { signature_request: actualMethod },
         refusable: true
     };
 
-    // Add phone_number when delivery is via WhatsApp or SMS
-    if (phoneNumber) {
+    // Add phone_number only when delivery is via WhatsApp or SMS
+    if ((actualMethod === 'whatsapp' || actualMethod === 'sms') && phoneNumber) {
         attributes.phone_number = phoneNumber;
-    }
-
-    if (needsPhone && !phoneNumber) {
-        console.warn(`[Clicksign] Delivery method is ${method} but no valid phone number provided, falling back to email`);
     }
 
     const body = {
@@ -530,14 +541,43 @@ export async function createContractEnvelope(contractData: {
     period: number;
     startDate: string;
     productName?: string;
+    paymentDay?: number;
+    // Extra client data for full contract
+    clientRg?: string;
+    clientRgOrgao?: string;
+    clientAddress?: string;
+    clientCnpj?: string;
+    clientRazaoSocial?: string;
 }) {
     try {
-        // Step 1: Generate PDF
-        console.log('[Clicksign] Generating contract PDF...');
-        const pdfBase64 = await generateContractPdf({
-            ...contractData,
-            consultantName: `${COMPANY_REPS[0].name} / ${COMPANY_REPS[1].name}`
-        });
+        // Step 1: Generate full 17-page contract PDF
+        console.log('[Clicksign] Generating full contract PDF (17 pages)...');
+        let pdfBase64: string;
+        try {
+            pdfBase64 = await generateFullContractPdf({
+                clientName: contractData.clientName,
+                cpf: contractData.clientCpf,
+                rg: contractData.clientRg,
+                rgOrgao: contractData.clientRgOrgao,
+                address: contractData.clientAddress,
+                email: contractData.clientEmail,
+                cnpj: contractData.clientCnpj,
+                razaoSocial: contractData.clientRazaoSocial,
+                amount: contractData.amount,
+                rate: contractData.rate,
+                period: contractData.period,
+                paymentDay: contractData.paymentDay || 10,
+                startDate: contractData.startDate,
+                contractId: contractData.contractId,
+            });
+            console.log('[Clicksign] Full contract PDF generated successfully');
+        } catch (pdfErr) {
+            console.error('[Clicksign] Full PDF failed, falling back to simple PDF:', pdfErr);
+            pdfBase64 = await generateContractPdf({
+                ...contractData,
+                consultantName: `${COMPANY_REPS[0].name} / ${COMPANY_REPS[1].name}`
+            });
+        }
 
         // Step 2: Create Envelope
         const envelopeName = `Contrato ${contractData.contractId} - ${contractData.clientName}`;

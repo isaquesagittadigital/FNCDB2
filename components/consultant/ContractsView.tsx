@@ -16,10 +16,12 @@ import {
   Mail,
   Send,
   RotateCcw,
-  Trash2
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ContractModal from '../shared/modals/ContractModal';
+import ContractDetailModal from '../shared/ContractDetailModal';
 import { calculateContractProjection, ContractSimulation, PaymentInstallment } from '../../lib/financialUtils';
 import { format, isValid, parseISO } from 'date-fns';
 
@@ -37,11 +39,13 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
   const [clicksignLoading, setClicksignLoading] = useState(false);
   const [lastCreatedContractId, setLastCreatedContractId] = useState<string | null>(null);
   const [selectedContract, setSelectedContract] = useState<any>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; code: string } | null>(null);
 
   // Data States
   const [contracts, setContracts] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [clientsLoading, setClientsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   // Filter States
@@ -126,6 +130,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
 
   /* Clients Fetch - Uses the API endpoint that bypasses RLS */
   const fetchClients = async () => {
+    setClientsLoading(true);
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?limit=200`);
       if (!response.ok) throw new Error('Falha ao buscar clientes');
@@ -144,6 +149,8 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
       setClients(mapped);
     } catch (error) {
       console.error("Error fetching clients", error);
+    } finally {
+      setClientsLoading(false);
     }
   };
 
@@ -657,9 +664,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (confirm('Deseja excluir este contrato?')) {
-                                      handleDeleteContract(c.fullData?.id || c.id);
-                                    }
+                                    setDeleteConfirm({ id: c.fullData?.id || c.id, code: c.id });
                                   }}
                                   title="Excluir contrato"
                                   className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -679,18 +684,16 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                                 </button>
                               </>
                             )}
-                            {(c.status === 'Vigente' || c.status === 'Processando') && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedContract(c.fullData);
-                                }}
-                                title="Ver detalhes"
-                                className="p-2 text-slate-400 hover:text-[#002B49] hover:bg-slate-100 rounded-lg transition-colors"
-                              >
-                                <Eye size={16} />
-                              </button>
-                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedContract(c.fullData);
+                              }}
+                              title="Ver contrato"
+                              className="p-2 text-slate-400 hover:text-[#002B49] hover:bg-slate-100 rounded-lg transition-colors"
+                            >
+                              <Eye size={16} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -739,7 +742,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
               <div className="space-y-2 relative">
                 <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Cliente <span className="text-[#00A3B1]">*</span></label>
 
-                <div className="relative">
+                <div className="relative z-30">
                   <div className="relative">
                     <input
                       type="text"
@@ -766,9 +769,9 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                         onClick={() => setShowClientDropdown(false)}
                       />
                       <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl max-h-60 overflow-y-auto z-20 divide-y divide-slate-50">
-                        {loading && <div className="p-4 text-xs text-slate-400">Carregando clientes...</div>}
-                        {!loading && clients.length === 0 && <div className="p-4 text-xs text-slate-400">Nenhum cliente disponível.</div>}
-                        {!loading && clients.length > 0 && filteredClients.length === 0 && (
+                        {clientsLoading && <div className="p-4 text-xs text-slate-400">Carregando clientes...</div>}
+                        {!clientsLoading && clients.length === 0 && <div className="p-4 text-xs text-slate-400">Nenhum cliente disponível.</div>}
+                        {!clientsLoading && clients.length > 0 && filteredClients.length === 0 && (
                           <div className="p-4 text-xs text-slate-400">Nenhum cliente encontrado com este termo.</div>
                         )}
                         {filteredClients.map(client => (
@@ -970,14 +973,6 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
         setSimulation(null);
       }} />
 
-      {/* Detail Modal */}
-      {selectedContract && (
-        <ContractModal
-          isOpen={!!selectedContract}
-          onClose={() => setSelectedContract(null)}
-          contract={selectedContract}
-        />
-      )}
 
       {/* Clicksign Confirmation Modal */}
       <ClicksignConfirmModal
@@ -995,6 +990,64 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
           setLastCreatedContractId(null);
         }}
       />
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setDeleteConfirm(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-5">
+                  <AlertTriangle className="w-8 h-8 text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-[#002B49] mb-2">Excluir contrato</h3>
+                <p className="text-slate-500 mb-1">Tem certeza que deseja excluir o contrato</p>
+                <p className="text-[#002B49] font-bold text-lg mb-2">#{deleteConfirm.code}?</p>
+                <p className="text-sm text-slate-400 mb-8">Esta ação não poderá ser desfeita.</p>
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={() => setDeleteConfirm(null)}
+                    className="flex-1 py-3 px-6 bg-white border-2 border-slate-200 hover:border-slate-300 text-[#002B49] font-semibold rounded-xl transition-all active:scale-[0.97]"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDeleteContract(deleteConfirm.id);
+                      setDeleteConfirm(null);
+                    }}
+                    className="flex-1 py-3 px-6 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl transition-all active:scale-[0.97] shadow-lg shadow-red-500/25"
+                  >
+                    Sim, excluir
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Contract Detail Modal */}
+      {selectedContract && (
+        <ContractDetailModal
+          contract={selectedContract}
+          onClose={() => setSelectedContract(null)}
+        />
+      )}
+
     </div>
   );
 };

@@ -1,6 +1,7 @@
 
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import dotenv from 'dotenv';
 import { supabase } from './lib/supabase';
 
@@ -15,6 +16,12 @@ server.register(cors, {
     origin: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
+});
+
+server.register(multipart, {
+    limits: {
+        fileSize: 2 * 1024 * 1024, // 2MB
+    }
 });
 
 // Routes

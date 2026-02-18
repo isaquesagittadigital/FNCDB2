@@ -4,14 +4,12 @@ import {
     Calendar,
     FileText,
     User,
-    CheckCircle2,
     ShieldCheck,
     Users,
     Receipt,
     FileSpreadsheet,
     BarChart3,
     Briefcase,
-    FolderOpen,
     LayoutGrid
 } from 'lucide-react';
 import { SidebarItem } from '../layout/Sidebar';
@@ -19,7 +17,6 @@ import { SidebarItem } from '../layout/Sidebar';
 export const consultantMenu: SidebarItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'simulator', label: 'Simulador', icon: LayoutGrid },
-    { id: 'approval', label: 'Aprovação', icon: CheckCircle2 },
     {
         id: 'cadastros',
         label: 'Cadastros',

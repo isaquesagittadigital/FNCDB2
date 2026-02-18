@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { z } from 'zod';
 import { sendWelcomeEmail } from '../services/email.service';
 import { createContractEnvelope, getEnvelopeDetails, createWebhook, listWebhooks, deleteWebhook } from '../services/clicksign';
+import { generateFullContractPdf } from '../services/contract-template';
 import crypto from 'crypto';
 
 const clientSchema = z.object({
@@ -975,6 +976,71 @@ export async function adminRoutes(server: FastifyInstance) {
         }
     });
 
+    // ─── PDF Download ──────────────────────────────────────────────────────────
+
+    // GET /contracts/:id/pdf - Generate and download contract PDF
+    server.get('/contracts/:id/pdf', async (request: any, reply) => {
+        try {
+            const { id } = request.params;
+
+            // Fetch contract
+            const { data: contract, error: contractError } = await supabase
+                .from('contratos')
+                .select('*')
+                .eq('id', id)
+                .single();
+
+            if (contractError || !contract) {
+                return reply.status(404).send({ error: 'Contrato não encontrado.' });
+            }
+
+            // Fetch client data
+            let client: any = {};
+            const clientIdField = contract.user_id || contract.cliente_id;
+            if (clientIdField) {
+                const { data: clientData } = await supabase
+                    .from('usuarios')
+                    .select('*')
+                    .eq('id', clientIdField)
+                    .single();
+                if (clientData) client = clientData;
+            }
+
+            const clientDisplayName = client.nome_fantasia || client.razao_social || client.nome || 'Cliente';
+
+            // Generate the same PDF as sent to Clicksign
+            const pdfBase64 = await generateFullContractPdf({
+                clientName: clientDisplayName,
+                cpf: client.cpf || '',
+                rg: client.rg || undefined,
+                rgOrgao: client.rg_orgao || undefined,
+                address: client.endereco || undefined,
+                email: client.email || '',
+                cnpj: client.cnpj || undefined,
+                razaoSocial: client.razao_social || undefined,
+                amount: contract.valor_aporte || 0,
+                rate: contract.taxa_mensal || 0,
+                period: contract.periodo_meses || 6,
+                paymentDay: contract.dia_pagamento || 10,
+                startDate: contract.data_inicio || new Date().toISOString(),
+                contractId: contract.codigo || id.substring(0, 8),
+            });
+
+            const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+            const filename = `contrato_${contract.codigo || id.substring(0, 8)}.pdf`;
+
+            return reply
+                .header('Content-Type', 'application/pdf')
+                .header('Content-Disposition', `attachment; filename="${filename}"`)
+                .header('Content-Length', pdfBuffer.length)
+                .send(pdfBuffer);
+
+        } catch (err: any) {
+            server.log.error(err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
     // ─── Clicksign Integration ──────────────────────────────────────────────────
 
     // POST /clicksign/send-contract - Create envelope + send for signature
@@ -1000,13 +1066,20 @@ export async function adminRoutes(server: FastifyInstance) {
             // Fetch client data - contratos uses 'user_id' for client reference
             let client: any = null;
             const clientIdField = contract.user_id || contract.cliente_id;
+            console.log('[Clicksign] Looking for client with id:', clientIdField);
             if (clientIdField) {
-                const { data: clientData } = await supabase
+                const { data: clientData, error: clientError } = await supabase
                     .from('usuarios')
-                    .select('nome_fantasia, email, cpf, data_nascimento, celular')
+                    .select('*')
                     .eq('id', clientIdField)
                     .single();
-                if (clientData) client = clientData;
+                if (clientError) {
+                    console.error('[Clicksign] Error fetching client:', clientError.message);
+                }
+                if (clientData) {
+                    client = clientData;
+                    console.log('[Clicksign] Found client:', client.nome_fantasia || client.email);
+                }
             }
 
             if (!client || !client.email) {
@@ -1021,22 +1094,30 @@ export async function adminRoutes(server: FastifyInstance) {
                 });
             }
 
-            console.log(`[Clicksign] Sending contract for client: ${client.nome_fantasia} (${client.email})`);
+            const clientDisplayName = client.nome_fantasia || client.razao_social || client.nome || 'Cliente';
+            console.log(`[Clicksign] Sending contract for client: ${clientDisplayName} (${client.email})`);
 
-            // Call Clicksign flow (company representatives are configured in the service)
+            // Call Clicksign flow with full client data for 17-page contract
             const result = await createContractEnvelope({
                 contractId: contract.codigo || contractId.substring(0, 8),
-                clientName: client?.nome_fantasia || 'Cliente',
-                clientEmail: client?.email || '',
-                clientCpf: client?.cpf || '52998224725',
-                clientBirthday: client?.data_nascimento || undefined,
-                clientPhone: client?.celular || undefined,
+                clientName: clientDisplayName,
+                clientEmail: client.email,
+                clientCpf: client.cpf || '52998224725',
+                clientBirthday: client.data_nascimento || undefined,
+                clientPhone: client.celular || undefined,
                 deliveryMethod,
                 amount: contract.valor_aporte || 0,
                 rate: contract.taxa_mensal || 0,
                 period: contract.periodo_meses || 6,
                 startDate: contract.data_inicio || new Date().toISOString(),
-                productName: contract.titulo || 'FNCD Capital'
+                productName: contract.titulo || 'FNCD Capital',
+                paymentDay: contract.dia_pagamento || 10,
+                // Extra client data for the full contract template
+                clientRg: client.rg || undefined,
+                clientRgOrgao: client.rg_orgao || undefined,
+                clientAddress: client.endereco || undefined,
+                clientCnpj: client.cnpj || undefined,
+                clientRazaoSocial: client.razao_social || undefined,
             });
 
             // Update contract with envelope info (clicksign columns may not exist yet)
@@ -1300,7 +1381,7 @@ export async function adminRoutes(server: FastifyInstance) {
                 return reply.status(500).send({ error: errText });
             }
 
-            const commissions: any[] = await dataRes.json();
+            const commissions: any[] = (await dataRes.json()) as any[];
 
             // Enrich with client names and contract codes
             const clientIds = [...new Set(commissions.map((c: any) => c.cliente_id).filter(Boolean))];
@@ -1364,12 +1445,11 @@ export async function adminRoutes(server: FastifyInstance) {
                 .select('*')
                 .order('created_at', { ascending: false });
 
-            // Filter: if status provided, filter by it. Otherwise show Processando + already reviewed
+            // Filter: if status provided, filter by it. Otherwise show all contracts
             if (filterStatus) {
                 query = query.eq('status', filterStatus);
-            } else {
-                query = query.in('status', ['Processando', 'Vigente', 'Reprovado']);
             }
+            // No else filter - show all contracts in the approval panel
 
             const { data: contracts, error } = await query;
             if (error) throw error;
@@ -1648,7 +1728,7 @@ export async function adminRoutes(server: FastifyInstance) {
         }
     });
 
-    // POST /contracts/:id/comprovante - Upload comprovante URL
+    // POST /contracts/:id/comprovante - Upload comprovante URL (legacy)
     server.post('/contracts/:id/comprovante', async (request: any, reply) => {
         const { id } = request.params;
         const { comprovante_url } = request.body as { comprovante_url: string };
@@ -1668,6 +1748,158 @@ export async function adminRoutes(server: FastifyInstance) {
             if (error) throw error;
             return reply.send({ success: true, contract: data });
         } catch (err: any) {
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════════════
+    // COMPROVANTES - Receipt attachment management
+    // ═══════════════════════════════════════════════════════════════
+
+    // Ensure comprovantes table exists
+    const ensureComprovantesTable = async () => {
+        try {
+            await supabase.rpc('exec_sql', {
+                sql: `CREATE TABLE IF NOT EXISTS public.comprovantes (
+                    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                    contrato_id UUID NOT NULL,
+                    arquivo_url TEXT NOT NULL,
+                    arquivo_nome TEXT,
+                    data_transferencia DATE,
+                    observacao TEXT,
+                    uploaded_by UUID,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )`
+            });
+        } catch (e) {
+            // Table may already exist, that's fine
+        }
+    };
+    ensureComprovantesTable();
+
+    // GET /contracts/:id/comprovantes - List all comprovantes for a contract
+    server.get('/contracts/:id/comprovantes', async (request: any, reply) => {
+        const { id } = request.params;
+        try {
+            const { data, error } = await supabase
+                .from('comprovantes')
+                .select('*')
+                .eq('contrato_id', id)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            return reply.send(data || []);
+        } catch (err: any) {
+            console.error('[Comprovantes] List error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // POST /contracts/:id/comprovantes/upload - Upload comprovante file
+    server.post('/contracts/:id/comprovantes/upload', async (request: any, reply) => {
+        const { id } = request.params;
+        try {
+            const data = await request.file();
+            if (!data) {
+                return reply.status(400).send({ error: 'Nenhum arquivo enviado.' });
+            }
+
+            const buf = await data.toBuffer();
+            const originalName = data.filename || 'comprovante.pdf';
+            const storageName = `${id}/${Date.now()}_${originalName}`;
+
+            // Get data_transferencia from fields if present
+            let dataTransferencia: string | null = null;
+            if (data.fields?.data_transferencia) {
+                const field = data.fields.data_transferencia as any;
+                dataTransferencia = field.value || null;
+            }
+
+            // Upload to Supabase Storage
+            const { error: uploadError } = await supabase.storage
+                .from('comprovantes')
+                .upload(storageName, buf, {
+                    contentType: data.mimetype || 'application/pdf',
+                    upsert: false
+                });
+
+            if (uploadError) {
+                console.error('[Comprovantes] Storage upload error:', uploadError);
+                throw uploadError;
+            }
+
+            // Get public URL
+            const { data: urlData } = supabase.storage
+                .from('comprovantes')
+                .getPublicUrl(storageName);
+
+            const publicUrl = urlData?.publicUrl || '';
+
+            // Insert record
+            const { data: record, error: insertError } = await supabase
+                .from('comprovantes')
+                .insert({
+                    contrato_id: id,
+                    arquivo_url: publicUrl,
+                    arquivo_nome: originalName,
+                    data_transferencia: dataTransferencia,
+                })
+                .select()
+                .single();
+
+            if (insertError) throw insertError;
+
+            // Also update contratos.comprovante_url for backward compat
+            await supabase
+                .from('contratos')
+                .update({ comprovante_url: publicUrl, arquivo_url: publicUrl })
+                .eq('id', id);
+
+            return reply.send({ success: true, comprovante: record });
+        } catch (err: any) {
+            console.error('[Comprovantes] Upload error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // DELETE /comprovantes/:compId - Delete a comprovante
+    server.delete('/comprovantes/:compId', async (request: any, reply) => {
+        const { compId } = request.params;
+        try {
+            // Fetch record first to get file path
+            const { data: comp, error: fetchErr } = await supabase
+                .from('comprovantes')
+                .select('*')
+                .eq('id', compId)
+                .single();
+
+            if (fetchErr || !comp) {
+                return reply.status(404).send({ error: 'Comprovante não encontrado.' });
+            }
+
+            // Delete from storage
+            if (comp.arquivo_url) {
+                try {
+                    const urlObj = new URL(comp.arquivo_url);
+                    const pathPart = urlObj.pathname.split('/storage/v1/object/public/comprovantes/')[1];
+                    if (pathPart) {
+                        await supabase.storage.from('comprovantes').remove([decodeURIComponent(pathPart)]);
+                    }
+                } catch (e) {
+                    console.warn('[Comprovantes] Could not delete file from storage:', e);
+                }
+            }
+
+            // Delete record
+            const { error: deleteErr } = await supabase
+                .from('comprovantes')
+                .delete()
+                .eq('id', compId);
+
+            if (deleteErr) throw deleteErr;
+            return reply.send({ success: true });
+        } catch (err: any) {
+            console.error('[Comprovantes] Delete error:', err);
             return reply.status(500).send({ error: err.message });
         }
     });
