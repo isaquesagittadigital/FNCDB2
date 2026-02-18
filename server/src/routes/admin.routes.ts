@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { supabase } from '../lib/supabase';
 import { z } from 'zod';
-import { sendWelcomeEmail } from '../services/email.service';
+import { sendWelcomeEmail, sendRenewalRequestEmail, sendRedeemRequestEmail } from '../services/email.service';
 import { createContractEnvelope, getEnvelopeDetails, createWebhook, listWebhooks, deleteWebhook } from '../services/clicksign';
 import { generateFullContractPdf } from '../services/contract-template';
 import crypto from 'crypto';
@@ -1900,6 +1900,231 @@ export async function adminRoutes(server: FastifyInstance) {
             return reply.send({ success: true });
         } catch (err: any) {
             console.error('[Comprovantes] Delete error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // ─── Contract Renewal Request ──────────────────────────────────────────────
+
+    // POST /contracts/:id/renewal - Client requests contract renewal
+    server.post('/contracts/:id/renewal', async (request: any, reply) => {
+        try {
+            const { id } = request.params;
+
+            // Fetch the contract
+            const { data: contract, error: contractError } = await supabase
+                .from('contratos')
+                .select('*')
+                .eq('id', id)
+                .single();
+
+            if (contractError || !contract) {
+                return reply.status(404).send({ error: 'Contrato não encontrado.' });
+            }
+
+            // Fetch client data
+            const clientId = contract.user_id || contract.cliente_id;
+            let clientData: any = {};
+            if (clientId) {
+                const { data: client } = await supabase
+                    .from('usuarios')
+                    .select('*')
+                    .eq('id', clientId)
+                    .single();
+                if (client) clientData = client;
+            }
+
+            // Find the consultant
+            // Priority: contract.consultor_id > client.consultant_id
+            const consultorId = contract.consultor_id || clientData.consultant_id;
+            let consultorData: any = null;
+
+            if (consultorId) {
+                const { data: consultor } = await supabase
+                    .from('usuarios')
+                    .select('*')
+                    .eq('id', consultorId)
+                    .single();
+                if (consultor) consultorData = consultor;
+            }
+
+            if (!consultorData) {
+                return reply.status(400).send({ error: 'Consultor não encontrado para este contrato.' });
+            }
+
+            const clientName = clientData.nome_fantasia || clientData.razao_social || clientData.nome || 'Cliente';
+            const consultantName = consultorData.nome_fantasia || consultorData.razao_social || consultorData.nome || 'Consultor';
+            const contractCode = contract.codigo || id.substring(0, 8).toUpperCase();
+            const now = new Date();
+            const requestDate = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+            // Insert renewal request into DB
+            // Calculate data_vencimento from contract
+            let dataVencimento = contract.data_vencimento || null;
+            if (!dataVencimento && contract.data_inicio && contract.periodo_meses) {
+                const start = new Date(contract.data_inicio);
+                start.setMonth(start.getMonth() + contract.periodo_meses);
+                dataVencimento = start.toISOString();
+            }
+
+            const { data: renewal, error: renewalError } = await supabase
+                .from('renovacoes')
+                .insert({
+                    contrato_id: id,
+                    user_id: clientId,
+                    status: 'Pendente',
+                    valor_renovacao: contract.valor_aporte || 0,
+                    taxa_renovacao: contract.taxa_mensal || 0,
+                    periodo_meses: contract.periodo_meses || null,
+                    data_vencimento: dataVencimento,
+                    data_solicitacao: now.toISOString(),
+                })
+                .select()
+                .single();
+
+            if (renewalError) {
+                console.error('[Renewal] DB insert error:', renewalError);
+                return reply.status(500).send({ error: 'Erro ao registrar solicitação de renovação.' });
+            }
+
+            // Send email to consultant
+            try {
+                await sendRenewalRequestEmail({
+                    consultantEmail: consultorData.email,
+                    consultantName,
+                    clientName,
+                    contractCode,
+                    requestDate,
+                });
+                server.log.info(`[Renewal] Email sent to consultant ${consultorData.email} for contract ${contractCode}`);
+            } catch (emailErr: any) {
+                server.log.error(`[Renewal] Email failed: ${emailErr.message}`);
+                // Don't fail the whole request if email fails
+            }
+
+            return reply.send({
+                success: true,
+                renewal: renewal,
+                message: 'Solicitação de renovação enviada com sucesso.',
+            });
+
+        } catch (err: any) {
+            server.log.error('[Renewal] Error:', err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    server.post('/contracts/:id/redeem', async (req, reply) => {
+        const { id } = req.params as { id: string };
+        const body = req.body as { valor_resgate: number; resgate_integral: boolean };
+
+        if (!id) return reply.status(400).send({ error: 'Contract ID is required' });
+
+        try {
+            // Check if contract exists
+            const { data: contract, error } = await supabase
+                .from('contratos')
+                .select('*')
+                .eq('id', id)
+                .single();
+
+            if (error || !contract) {
+                return reply.status(404).send({ error: 'Contrato não encontrado.' });
+            }
+
+            // Get user associated with contract
+            const clientId = contract.user_id;
+            let clientData = null;
+
+            if (clientId) {
+                // Try clients table or usuarios table or generic users
+                const { data: client } = await supabase
+                    .from('usuarios')
+                    .select('*')
+                    .eq('id', clientId)
+                    .single();
+                if (client) clientData = client;
+            }
+
+            if (!clientData) {
+                // Try to get from auth.users or wait... maybe user_id is enough for email?
+                // For now, assume we need client data for email
+                return reply.status(400).send({ error: 'Cliente não encontrado para este contrato.' });
+            }
+
+            // Get consultant associated with contract
+            const consultorId = contract.consultor_id;
+            let consultorData: any = null;
+
+            if (consultorId) {
+                const { data: consultor } = await supabase
+                    .from('usuarios')
+                    .select('*')
+                    .eq('id', consultorId)
+                    .single();
+                if (consultor) consultorData = consultor;
+            }
+
+            if (!consultorData) {
+                return reply.status(400).send({ error: 'Consultor não encontrado para este contrato.' });
+            }
+
+            const clientName = clientData.nome_fantasia || clientData.razao_social || clientData.nome || 'Cliente';
+            const consultantName = consultorData.nome_fantasia || consultorData.razao_social || consultorData.nome || 'Consultor';
+            const contractCode = contract.codigo || id.substring(0, 8).toUpperCase();
+            const now = new Date();
+            const requestDate = `${now.toLocaleDateString('pt-BR')} ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+            // Insert redeem request into DB
+            const { data: redeem, error: redeemError } = await supabase
+                .from('resgates')
+                .insert({
+                    contrato_id: id,
+                    user_id: clientId,
+                    consultor_id: consultorId,
+                    status: 'Pendente',
+                    valor_resgate: body.valor_resgate,
+                    tipo_resgate: body.resgate_integral ? 'Integral' : 'Parcial',
+                    data_solicitacao: now.toISOString(),
+                })
+                .select()
+                .single();
+
+            if (redeemError) {
+                server.log.error({ err: redeemError }, '[Redeem] DB Insert Error');
+                return reply.status(500).send({ error: 'Erro ao salvar solicitação de resgate.' });
+            }
+
+            // Format values for email
+            const redeemValueFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(body.valor_resgate);
+            const contractValueFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(contract.valor_aporte || contract.valor || 0);
+
+            // Send email to consultant
+            try {
+                await sendRedeemRequestEmail({
+                    consultantEmail: consultorData.email,
+                    consultantName,
+                    clientName,
+                    contractCode,
+                    requestDate,
+                    redeemValue: redeemValueFmt,
+                    redeemType: body.resgate_integral ? 'Integral' : 'Parcial',
+                    contractValue: contractValueFmt,
+                });
+                server.log.info(`[Redeem] Email sent to consultant ${consultorData.email} for contract ${contractCode}`);
+            } catch (emailErr: any) {
+                server.log.error(`[Redeem] Email failed: ${emailErr.message}`);
+                // Don't fail the whole request if email fails
+            }
+
+            return reply.send({
+                success: true,
+                redeem: redeem,
+                message: 'Solicitação de resgate enviada com sucesso.',
+            });
+
+        } catch (err: any) {
+            server.log.error('[Redeem] Error:', err);
             return reply.status(500).send({ error: err.message });
         }
     });

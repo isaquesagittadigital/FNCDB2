@@ -1,17 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Search, Eye, FileSearch } from 'lucide-react';
 import InvestorFormDocument from './documents/InvestorFormDocument';
-import ContractDetailsModal from './documents/ContractDetailsModal';
+import ContractDetailModal from './ContractDetailModal';
+import ContractStatusBadge from './ui/ContractStatusBadge';
 import { supabase } from '../../lib/supabase';
-
-const StatusBadge: React.FC<{ status: string }> = ({ status }) => (
-  <span className={`text-[10px] font-bold px-4 py-1.5 rounded-full whitespace-nowrap ${status === 'Vigente' || status === 'Ativo' ? 'bg-[#E6F6F7] text-[#00A3B1]' :
-      status === 'Pendente' ? 'bg-amber-50 text-amber-600' :
-        'bg-slate-100 text-slate-500'
-    }`}>
-    {status}
-  </span>
-);
 
 interface DocumentsViewProps {
   userProfile?: any;
@@ -174,7 +166,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
                           {doc.displayId}
                         </button>
                       </td>
-                      <td className="px-6 py-5"><StatusBadge status={doc.status} /></td>
+                      <td className="px-6 py-5"><ContractStatusBadge status={doc.status} /></td>
                       <td className="px-6 py-5 text-[#002B49] font-medium">{doc.product}</td>
                       <td className="px-6 py-5 text-[#002B49] font-bold">{doc.amount}</td>
                       <td className="px-6 py-5 text-[#002B49] font-medium">{doc.yield}</td>
@@ -247,10 +239,11 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
       )}
 
       {selectedContract && isContractDetailsOpen && (
-        <ContractDetailsModal
+        <ContractDetailModal
           contract={selectedContract}
           onClose={() => setIsContractDetailsOpen(false)}
           userProfile={userProfile || investorData}
+          role="client"
         />
       )}
 

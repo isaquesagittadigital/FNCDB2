@@ -3,6 +3,8 @@ import { Plus, Home, ChevronRight, Search, Trash2, Edit2, ArrowUpDown, Eye } fro
 import { motion } from 'framer-motion';
 import ContractForm from './ContractForm';
 import ContractDetailModal from '../../shared/ContractDetailModal';
+import ContractStatusBadge from '../../shared/ui/ContractStatusBadge';
+import { CONTRACT_STATUSES } from '../../../lib/contractStatus';
 
 const ContractsView = () => {
     // Mock data based on the image provided
@@ -71,19 +73,7 @@ const ContractsView = () => {
         setSelectedId(null);
     };
 
-    const getStatusBadge = (status: string) => {
-        let style = "bg-slate-100 text-slate-600 border-slate-200"; // Default/Rascunho
-        if (status === 'Vigente') style = "bg-purple-50 text-purple-600 border-purple-100";
-        else if (status === 'Em processo') style = "bg-amber-50 text-amber-600 border-amber-100";
-        else if (status === 'Finalizado') style = "bg-emerald-50 text-emerald-600 border-emerald-100";
-        else if (status === 'Cancelado') style = "bg-red-50 text-red-600 border-red-100";
 
-        return (
-            <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${style}`}>
-                {status}
-            </span>
-        );
-    };
 
     const formatCurrency = (value: number) => {
         return new Intl.NumberFormat('pt-BR', {
@@ -180,11 +170,9 @@ const ContractsView = () => {
                             className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all text-sm text-slate-600 bg-white"
                         >
                             <option value="">Todos</option>
-                            <option value="Rascunho">Rascunho</option>
-                            <option value="Em processo">Em processo</option>
-                            <option value="Vigente">Vigente</option>
-                            <option value="Cancelado">Cancelado</option>
-                            <option value="Finalizado">Finalizado</option>
+                            {CONTRACT_STATUSES.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -249,7 +237,7 @@ const ContractsView = () => {
                                     {contract.client_name || 'Desconhecido'}
                                 </div>
                                 <div className="col-span-1 flex justify-center">
-                                    {getStatusBadge(contract.status)}
+                                    <ContractStatusBadge status={contract.status} size="md" />
                                 </div>
                                 <div className="col-span-2 text-slate-500 truncate" title={contract.titulo}>
                                     {contract.titulo}

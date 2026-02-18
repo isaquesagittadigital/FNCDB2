@@ -22,28 +22,40 @@ const ProfileView: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      console.log('[ProfileView] auth user:', user?.id, 'error:', authError?.message || 'none');
       if (!user) return;
 
-      const [profileRes, accountsRes] = await Promise.all([
-        supabase
-          .from('usuarios')
-          .select('*')
-          .eq('id', user.id)
-          .single(),
-        supabase
+      // Fetch profile separately from bank accounts
+      const { data: profileData, error: profileError } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      console.log('[ProfileView] profile:', profileData?.id, 'error:', profileError?.message || 'none');
+
+      if (profileData) {
+        setUserProfile(profileData);
+      }
+
+      // Fetch bank accounts separately - don't fail if this errors
+      try {
+        const { data: accountsData, error: accountsError } = await supabase
           .from('contas_bancarias')
           .select('*')
-          .eq('user_id', user.id)
-      ]);
+          .eq('user_id', user.id);
 
-      if (profileRes.error) throw profileRes.error;
-      if (accountsRes.error) throw accountsRes.error;
+        console.log('[ProfileView] accounts:', accountsData?.length, 'error:', accountsError?.message || 'none');
 
-      setUserProfile(profileRes.data);
-      setAccounts(accountsRes.data || []);
+        if (accountsData) {
+          setAccounts(accountsData);
+        }
+      } catch (accError) {
+        console.warn('[ProfileView] Failed to load bank accounts:', accError);
+      }
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      console.error('[ProfileView] Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }

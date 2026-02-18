@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Eye, Upload, CheckCircle2, Clock, AlertCircle, FileText, DollarSign, User, Building2, ClipboardList, Paperclip, TrendingUp, Download, Loader2, Trash2, ExternalLink, Calendar, ShieldCheck, AlertTriangle, FileImage, File, RefreshCw, ArrowRight, Wallet } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../../lib/supabase';
-import UploadComprovanteModal from './UploadComprovanteModal';
-import ContractStatusBadge from './ui/ContractStatusBadge';
-import RenewalConfirmModal from './modals/RenewalConfirmModal';
-import RenewalViewModal from './modals/RenewalViewModal';
-import RedeemRequestModal from './modals/RedeemRequestModal';
-import RedeemViewModal from './modals/RedeemViewModal';
+import { supabase } from '../../../lib/supabase';
+import UploadComprovanteModal from '../../shared/UploadComprovanteModal';
+import ContractStatusBadge from '../../shared/ui/ContractStatusBadge';
+import RenewalConfirmModal from '../../shared/modals/RenewalConfirmModal';
+import RenewalViewModal from '../../shared/modals/RenewalViewModal';
+import RedeemRequestModal from '../../shared/modals/RedeemRequestModal';
+import RedeemViewModal from '../../shared/modals/RedeemViewModal';
 
 export type ContractModalRole = 'client' | 'consultant' | 'admin';
 
@@ -25,7 +25,7 @@ interface ContractDetailModalProps {
     onClose: () => void;
     /** Optional: used for displaying client info when viewing as client */
     userProfile?: any;
-    /** Role determines which features are visible. Defaults to 'admin' */
+    /** Role determines which features are visible. Defaults to 'consultant' for this modal */
     role?: ContractModalRole;
 }
 
@@ -109,7 +109,7 @@ const ConfirmDialog = ({
 };
 
 /* ── Main Modal ── */
-const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onClose, userProfile, role = 'admin' }) => {
+const ConsultantContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onClose, userProfile, role = 'consultant' }) => {
     const [clientData, setClientData] = useState<any>(null);
     const [consultorData, setConsultorData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -1009,7 +1009,7 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
             </AnimatePresence>
 
             {/* Upload Modal */}
-            {showUploadModal && (
+            {showUploadModal && contract && (
                 <UploadComprovanteModal
                     contractId={contract.id}
                     onClose={() => setShowUploadModal(false)}
@@ -1124,7 +1124,7 @@ const EmptyState = ({
     subtitle,
 }: {
     icon: React.ReactNode;
-    iconBg: string;
+    iconBg: string; // e.g., 'bg-emerald-50'
     title: string;
     subtitle: string;
 }) => (
@@ -1137,4 +1137,4 @@ const EmptyState = ({
     </div>
 );
 
-export default ContractDetailModal;
+export default ConsultantContractDetailModal;

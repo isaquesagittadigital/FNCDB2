@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       host: '0.0.0.0',
+      // Enable SPA fallback — all routes serve index.html
+      historyApiFallback: true,
     },
     plugins: [react()],
     define: {

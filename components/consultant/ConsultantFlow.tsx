@@ -5,7 +5,6 @@ import {
     Calendar,
     FileText,
     User,
-    CheckCircle2,
     ShieldCheck,
     Users,
     Receipt,
@@ -14,6 +13,7 @@ import {
     Briefcase,
     FolderOpen
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import DashboardLayout from '../layout/DashboardLayout';
 import ConsultantDashboard from './ConsultantDashboard';
@@ -29,6 +29,7 @@ import DocumentsView from '../shared/DocumentsView';
 import ProfileView from './ConsultantProfileView';
 
 import { consultantMenu } from './menu';
+import { getTabFromSlug, getRoutePath } from '../../lib/routes';
 
 interface ConsultantFlowProps {
     onLogout: () => void;
@@ -37,7 +38,19 @@ interface ConsultantFlowProps {
 }
 
 const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile, onOpenSimulator }) => {
-    const [activeTab, setActiveTab] = useState('dashboard');
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Derive activeTab from URL
+    const pathParts = location.pathname.split('/').filter(Boolean);
+    // URL: /consultor/<slug>
+    const slug = pathParts[1] || 'dashboard';
+    const activeTab = getTabFromSlug('consultant', slug);
+
+    const handleTabChange = (tabId: string) => {
+        const path = getRoutePath('consultant', tabId);
+        navigate(path);
+    };
 
     const renderContent = () => {
         switch (activeTab) {
@@ -63,7 +76,7 @@ const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile, 
         <DashboardLayout
             sidebarItems={consultantMenu}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
             user={{
                 name: userProfile?.nome_fantasia || userProfile?.razao_social || userProfile?.nome || 'Consultor',
                 email: userProfile?.email || 'consultor@fncdcapital.com',

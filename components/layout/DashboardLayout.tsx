@@ -48,6 +48,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           user={user}
           activeTab={activeTab}
           onNotificationClick={() => onTabChange('notifications')}
+          onLogout={onLogout}
         />
 
         <div className="flex-1 overflow-y-auto p-4 bg-[#F8FAFB]">

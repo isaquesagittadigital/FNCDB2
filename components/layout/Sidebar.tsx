@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import {
     ChevronLeft,
     ChevronDown,
-    LogOut,
     User
 } from 'lucide-react';
 import { LogoIcon, LogoFull } from '../shared/ui/Logo';
@@ -235,11 +234,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                             <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
                         </div>
                     )}
-                    {isOpen && (
-                        <button onClick={onLogout} className="text-slate-300 hover:text-red-500 transition-colors">
-                            <LogOut size={14} />
-                        </button>
-                    )}
+
                 </div>
             </div>
         </aside>

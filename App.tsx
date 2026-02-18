@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import SplashScreen from './components/shared/ui/SplashScreen';
 import LoginForm from './components/auth/LoginForm';
@@ -10,30 +11,45 @@ import AdminFlow from './components/admin/AdminFlow';
 import SimulatorView from './components/simulator/SimulatorView';
 import { supabase } from './lib/supabase';
 import { PermissionsProvider } from './components/shared/contexts/PermissionsContext';
-
-export enum AppView {
-  SPLASH = 'SPLASH',
-  LOGIN = 'LOGIN',
-  FORGOT_PASSWORD = 'FORGOT_PASSWORD',
-  ENVIRONMENT_SELECTION = 'ENVIRONMENT_SELECTION',
-  DASHBOARD = 'DASHBOARD',
-  SIMULATOR = 'SIMULATOR'
-}
+import { rolePrefixes } from './lib/routes';
 
 export type UserRole = 'client' | 'consultant' | 'admin';
 
-const App: React.FC = () => {
-  const [view, setView] = useState<AppView>(AppView.SPLASH);
+/**
+ * Inner component that has access to router hooks
+ */
+const AppInner: React.FC = () => {
+  const [isReady, setIsReady] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const [splashStep, setSplashStep] = useState(0);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('consultant');
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
 
+  const navigate = useNavigate();
+  const location = useLocation();
+
   useEffect(() => {
+    // Keep localStorage session in sync when Supabase refreshes tokens
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED' && session) {
+        localStorage.setItem('session', JSON.stringify({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+        }));
+      }
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('session');
+        localStorage.removeItem('profile');
+      }
+    });
+
     const restoreSession = async () => {
       // Check if URL has special view (for new tab support)
       const params = new URLSearchParams(window.location.search);
       if (params.get('view') === 'simulator') {
-        setView(AppView.SIMULATOR);
+        navigate('/simulador', { replace: true });
+        setShowSplash(false);
+        setIsReady(true);
         return;
       }
 
@@ -42,27 +58,47 @@ const App: React.FC = () => {
         const profileStr = localStorage.getItem('profile');
 
         if (sessionStr && profileStr) {
-          const session = JSON.parse(sessionStr);
+          const savedSession = JSON.parse(sessionStr);
           const profile = JSON.parse(profileStr);
 
-          // Restore Supabase session and Wait for it
-          if (session) {
-            const { error } = await supabase.auth.setSession(session);
+          // Try to restore session - Supabase handles token refresh automatically
+          if (savedSession) {
+            const { error } = await supabase.auth.setSession({
+              access_token: savedSession.access_token,
+              refresh_token: savedSession.refresh_token,
+            });
+
             if (error) {
-              console.error("Error restoring Supabase session:", error);
-              // If token is invalid (already used, expired, etc), simple cleanup and return to login
-              if (error.message.includes('Invalid Refresh Token') || error.message.includes('Already Used')) {
-                localStorage.removeItem('session');
-                localStorage.removeItem('profile');
-                setView(AppView.LOGIN);
-                return;
-              }
+              console.warn("Session expired, redirecting to login:", error.message);
+              localStorage.removeItem('session');
+              localStorage.removeItem('profile');
+              await supabase.auth.signOut().catch(() => { });
+              setShowSplash(false);
+              setIsReady(true);
+              navigate('/login', { replace: true });
+              return;
+            }
+
+            // Session restored successfully — update localStorage with fresh tokens
+            const { data: { session: freshSession } } = await supabase.auth.getSession();
+            if (freshSession) {
+              localStorage.setItem('session', JSON.stringify({
+                access_token: freshSession.access_token,
+                refresh_token: freshSession.refresh_token,
+              }));
             }
           }
 
           if (profile && profile.tipo_user) {
-            handleLoginSuccess(profile.tipo_user, profile);
-            return; // Skip splash animation logic if session exists
+            handleLoginSuccess(profile.tipo_user, profile, undefined, true);
+            return;
+          } else {
+            localStorage.removeItem('session');
+            localStorage.removeItem('profile');
+            setShowSplash(false);
+            setIsReady(true);
+            navigate('/login', { replace: true });
+            return;
           }
         }
       } catch (e) {
@@ -71,17 +107,25 @@ const App: React.FC = () => {
         localStorage.removeItem('profile');
       }
 
-      // If no session, proceed with Splash -> Login
+      // If no session, show Splash -> Login
       const t1 = setTimeout(() => setSplashStep(1), 1200);
-      const t2 = setTimeout(() => setView(AppView.LOGIN), 2800);
+      const t2 = setTimeout(() => {
+        setShowSplash(false);
+        setIsReady(true);
+        navigate('/login', { replace: true });
+      }, 2800);
       return () => { clearTimeout(t1); clearTimeout(t2); };
     };
 
     restoreSession();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const handleLoginSuccess = (role: string, profile?: any, permissions?: any) => {
-    let mappedRole: UserRole = 'consultant'; // default
+  const handleLoginSuccess = (role: string, profile?: any, permissions?: any, isRestore = false) => {
+    let mappedRole: UserRole = 'consultant';
 
     if (role === 'Admin') mappedRole = 'admin';
     else if (role === 'Cliente') mappedRole = 'client';
@@ -90,131 +134,222 @@ const App: React.FC = () => {
     setSelectedRole(mappedRole);
     if (profile) setUserProfile(profile);
 
-    // permissions are handled via localStorage in the Provider, 
-    // but we can also trigger a state update if we had direct access to setPermissions here.
-    // For now, reload or just ensure Provider picks it up.
     if (permissions) {
       localStorage.setItem('permissions', JSON.stringify(permissions));
     }
 
     if (!profile) {
-      // Fallback or fetch if needed, but Login form usually saves it
       const savedProfile = localStorage.getItem('profile');
       if (savedProfile) setUserProfile(JSON.parse(savedProfile));
     }
-    setView(AppView.DASHBOARD);
+
+    setShowSplash(false);
+    setIsReady(true);
+
+    // Navigate to dashboard of the role
+    const prefix = rolePrefixes[mappedRole];
+
+    // If restoring session and already on a valid role path, keep the current path
+    if (isRestore && location.pathname.startsWith(`/${prefix}/`)) {
+      // Already on a valid path, don't navigate
+    } else {
+      navigate(`/${prefix}/dashboard`, { replace: true });
+    }
   };
 
   const handleEnvironmentSelect = (role: UserRole) => {
     setSelectedRole(role);
-    setView(AppView.DASHBOARD);
+    const prefix = rolePrefixes[role];
+    navigate(`/${prefix}/dashboard`, { replace: true });
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await supabase.auth.signOut().catch(() => { });
     localStorage.removeItem('session');
     localStorage.removeItem('profile');
-    setView(AppView.LOGIN);
+    localStorage.removeItem('permissions');
+    setSelectedRole(null);
     setUserProfile(null);
+    navigate('/login', { replace: true });
   };
 
-  const renderDashboard = () => {
-    const commonProps = {
-      onLogout: handleLogout,
-      userProfile: userProfile,
-      onOpenSimulator: () => window.open('?view=simulator', '_blank')
-    };
-
-    switch (selectedRole) {
-      case 'client':
-        return <ClientFlow {...commonProps} />;
-      case 'consultant':
-        return <ConsultantFlow {...commonProps} />;
-      case 'admin':
-        return <AdminFlow {...commonProps} />;
-      default:
-        return <ConsultantFlow {...commonProps} />;
-    }
+  const commonProps = {
+    onLogout: handleLogout,
+    userProfile: userProfile,
+    onOpenSimulator: () => window.open('?view=simulator', '_blank')
   };
 
   return (
+    <div className="min-h-screen relative bg-[#F8FAFB] overflow-hidden">
+      <AnimatePresence mode="wait">
+        {showSplash && (
+          <motion.div
+            key="splash"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50"
+          >
+            <SplashScreen showText={splashStep === 1} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {isReady && (
+        <Routes>
+          {/* Auth routes */}
+          <Route
+            path="/login"
+            element={
+              <motion.div
+                key="login"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="w-full min-h-screen"
+              >
+                <LoginForm
+                  onForgotPassword={() => navigate('/esqueci-senha')}
+                  onLoginSuccess={handleLoginSuccess}
+                />
+              </motion.div>
+            }
+          />
+
+          <Route
+            path="/esqueci-senha"
+            element={
+              <motion.div
+                key="forgot"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="w-full min-h-screen"
+              >
+                <ForgotPassword onBackToLogin={() => navigate('/login')} />
+              </motion.div>
+            }
+          />
+
+          <Route
+            path="/selecionar-ambiente"
+            element={
+              <motion.div
+                key="selection"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.05 }}
+                className="w-full min-h-screen"
+              >
+                <EnvironmentSelection onSelect={handleEnvironmentSelect} />
+              </motion.div>
+            }
+          />
+
+          {/* Simulator */}
+          <Route
+            path="/simulador"
+            element={
+              <motion.div
+                key="simulator"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="w-full min-h-screen"
+              >
+                <SimulatorView onBack={() => {
+                  if (selectedRole) {
+                    navigate(`/${rolePrefixes[selectedRole]}/dashboard`);
+                  } else {
+                    navigate('/login');
+                  }
+                }} />
+              </motion.div>
+            }
+          />
+
+          {/* Client Routes */}
+          <Route
+            path="/cliente/*"
+            element={
+              selectedRole === 'client' ? (
+                <motion.div
+                  key="client-flow"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-full min-h-screen"
+                >
+                  <ClientFlow {...commonProps} />
+                </motion.div>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* Consultant Routes */}
+          <Route
+            path="/consultor/*"
+            element={
+              selectedRole === 'consultant' ? (
+                <motion.div
+                  key="consultant-flow"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-full min-h-screen"
+                >
+                  <ConsultantFlow {...commonProps} />
+                </motion.div>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* Admin Routes */}
+          <Route
+            path="/admin/*"
+            element={
+              selectedRole === 'admin' ? (
+                <motion.div
+                  key="admin-flow"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-full min-h-screen"
+                >
+                  <AdminFlow {...commonProps} />
+                </motion.div>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          {/* Default: redirect to login or dashboard */}
+          <Route
+            path="*"
+            element={
+              selectedRole ? (
+                <Navigate to={`/${rolePrefixes[selectedRole]}/dashboard`} replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+        </Routes>
+      )}
+    </div>
+  );
+};
+
+const App: React.FC = () => {
+  return (
     <PermissionsProvider>
-      <div className="min-h-screen relative bg-[#F8FAFB] overflow-hidden">
-        <AnimatePresence mode="wait">
-          {view === AppView.SPLASH && (
-            <motion.div
-              key="splash"
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50"
-            >
-              <SplashScreen showText={splashStep === 1} />
-            </motion.div>
-          )}
-
-          {view === AppView.LOGIN && (
-            <motion.div
-              key="login"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="w-full min-h-screen"
-            >
-              <LoginForm
-                onForgotPassword={() => setView(AppView.FORGOT_PASSWORD)}
-                onLoginSuccess={handleLoginSuccess}
-              />
-            </motion.div>
-          )}
-
-          {view === AppView.FORGOT_PASSWORD && (
-            <motion.div
-              key="forgot"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="w-full min-h-screen"
-            >
-              <ForgotPassword onBackToLogin={() => setView(AppView.LOGIN)} />
-            </motion.div>
-          )}
-
-          {view === AppView.ENVIRONMENT_SELECTION && (
-            <motion.div
-              key="selection"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              className="w-full min-h-screen"
-            >
-              <EnvironmentSelection onSelect={handleEnvironmentSelect} />
-            </motion.div>
-          )}
-
-          {view === AppView.SIMULATOR && (
-            <motion.div
-              key="simulator"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="w-full min-h-screen"
-            >
-              <SimulatorView onBack={() => setView(AppView.DASHBOARD)} />
-            </motion.div>
-          )}
-
-          {view === AppView.DASHBOARD && (
-            <motion.div
-              key="dashboard"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="w-full min-h-screen"
-            >
-              {renderDashboard()}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <BrowserRouter>
+        <AppInner />
+      </BrowserRouter>
     </PermissionsProvider>
   );
 };

@@ -7,7 +7,7 @@ import { supabase } from '../../lib/supabase';
 
 interface LoginFormProps {
   onForgotPassword: () => void;
-  onLoginSuccess: (role: string) => void;
+  onLoginSuccess: (role: string, profile?: any, permissions?: any) => void;
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess }) => {
@@ -46,17 +46,30 @@ const LoginForm: React.FC<LoginFormProps> = ({ onForgotPassword, onLoginSuccess 
       }
 
       console.log('Login successful:', data);
-      localStorage.setItem('session', JSON.stringify(data.session));
+      // Save only essential tokens (consistent format with token refresh listener)
+      if (data.session) {
+        localStorage.setItem('session', JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        }));
+      }
       localStorage.setItem('profile', JSON.stringify(data.profile)); // Save profile for persistence
 
       // Establish Supabase session for client-side usage (ProfileView, etc)
       if (data.session) {
-        const { error: sessionError } = await supabase.auth.setSession(data.session);
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
         if (sessionError) console.error("Failed to set Supabase session:", sessionError);
       }
 
-      // Pass the role to the callback
-      onLoginSuccess(data.profile.tipo_user);
+      if (!data.profile) {
+        throw new Error('Perfil não encontrado. Entre em contato com o suporte.');
+      }
+
+      // Pass the role, profile and permissions to the callback
+      onLoginSuccess(data.profile.tipo_user, data.profile, data.permissions);
     } catch (err: any) {
       setError(err.message);
     } finally {

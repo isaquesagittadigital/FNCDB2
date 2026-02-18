@@ -209,11 +209,17 @@ class PDFWriter {
 
     signatureBlock(name: string, doc: string, docLabel = 'CPF') {
         this.checkSpace(70);
-        this.page.drawLine({ start: { x: ML, y: this.y }, end: { x: ML + 280, y: this.y }, thickness: 0.5, color: rgb(0.3, 0.3, 0.3) });
+        const lineW = 280;
+        const lineX = ML + (TW - lineW) / 2;
+        this.page.drawLine({ start: { x: lineX, y: this.y }, end: { x: lineX + lineW, y: this.y }, thickness: 0.5, color: rgb(0.3, 0.3, 0.3) });
         this.y -= LINE_SPACING_BODY;
-        this.page.drawText(name.toUpperCase(), { x: ML, y: this.y, size: FONT_BODY, font: this.fontBold });
+        const nameText = name.toUpperCase();
+        const nameW = this.fontBold.widthOfTextAtSize(nameText, FONT_BODY);
+        this.page.drawText(nameText, { x: ML + (TW - nameW) / 2, y: this.y, size: FONT_BODY, font: this.fontBold });
         this.y -= LINE_SPACING_BODY;
-        this.page.drawText(`${docLabel} ${doc}`, { x: ML, y: this.y, size: FONT_NOTE, font: this.font });
+        const docText = `${docLabel} ${doc}`;
+        const docW = this.font.widthOfTextAtSize(docText, FONT_NOTE);
+        this.page.drawText(docText, { x: ML + (TW - docW) / 2, y: this.y, size: FONT_NOTE, font: this.font });
         this.y -= LINE_SPACING_BODY * 1.5;
     }
 
@@ -273,7 +279,7 @@ export async function generateFullContractPdf(data: ContractData): Promise<strin
     const fontBold = await doc.embedFont(StandardFonts.TimesRomanBold);
     const w = new PDFWriter(doc, font, fontBold);
 
-    // Load signature image once for reuse across all sections
+    // Load signature image for Section 1 only
     let sigImage: Awaited<ReturnType<typeof doc.embedPng>> | null = null;
     let sigDrawW = 0;
     let sigDrawH = 0;
@@ -289,8 +295,8 @@ export async function generateFullContractPdf(data: ContractData): Promise<strin
         console.warn('[PDF] Could not load signatures image:', e);
     }
 
-    // Helper: draw FNCD signature block with image
-    const drawFncdSignature = () => {
+    // Helper: draw FNCD signature WITH image (Section 1 / page 8 only)
+    const drawFncdSignatureWithImage = () => {
         if (sigImage) {
             w.checkSpace(sigDrawH + 80);
             const imgX = ML + (TW - sigDrawW) / 2;
@@ -307,6 +313,11 @@ export async function generateFullContractPdf(data: ContractData): Promise<strin
         } else {
             w.signatureBlock(FNCD.name, FNCD.cnpj, 'CNPJ');
         }
+    };
+
+    // Helper: draw FNCD signature WITHOUT image (NDA and Termo de Adesão)
+    const drawFncdSignature = () => {
+        w.signatureBlock(FNCD.name, FNCD.cnpj, 'CNPJ');
     };
 
     const dateLong = formatDateLong(data.startDate);
@@ -485,10 +496,10 @@ export async function generateFullContractPdf(data: ContractData): Promise<strin
     w.text('Anexo E — Recibo de Integralização e Emissão de UPs');
     w.space();
     w.text(`São Paulo, ${dateLong}.`);
-    w.space();
+    w.space(LINE_SPACING_BODY * 3);
 
-    // FNCD Signature with image
-    drawFncdSignature();
+    // FNCD Signature WITH image (only on Section 1 / page 8)
+    drawFncdSignatureWithImage();
 
     // ═══════════════════════════════════════════════════════════════
     // SECTION 2: NDA (Pages 9-12) - with dynamic client data
@@ -573,7 +584,7 @@ export async function generateFullContractPdf(data: ContractData): Promise<strin
 
     // NDA Signatures
     w.text(`São Paulo, ${dateLong}.`);
-    w.space();
+    w.space(LINE_SPACING_BODY * 3);
     w.signatureBlock(clientFullName, clientId, clientLabel);
     w.space();
     // FNCD Signature with image
@@ -672,7 +683,7 @@ export async function generateFullContractPdf(data: ContractData): Promise<strin
 
     // Final signatures
     w.text(`São Paulo, ${dateLong}.`);
-    w.space();
+    w.space(LINE_SPACING_BODY * 3);
     w.signatureBlock(clientFullName, clientId, clientLabel);
     w.space();
     // FNCD Signature with image
@@ -683,7 +694,7 @@ export async function generateFullContractPdf(data: ContractData): Promise<strin
     for (let i = 0; i < pages.length; i++) {
         const pageText = `Página ${i + 1} de ${pages.length}`;
         const pageTextW = font.widthOfTextAtSize(pageText, 10);
-        const pageX = ML + (TW - pageTextW) / 2;
+        const pageX = A4_W - MR - pageTextW;
         pages[i].drawText(pageText, {
             x: pageX, y: 20, size: 10, font, color: rgb(0.5, 0.5, 0.5)
         });

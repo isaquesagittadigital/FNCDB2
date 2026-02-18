@@ -8,6 +8,7 @@ import {
     Settings,
     Users
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import AdminDashboard from './dashboard/AdminDashboard';
 import Simulator from './simulator/Simulator';
@@ -27,6 +28,7 @@ import ClientsView from './clients/ClientsView';
 import InvoicesView from './invoices/InvoicesView';
 import EmptyState from '../shared/ui/EmptyState';
 import { adminMenu } from './menu';
+import { getTabFromSlug, getRoutePath } from '../../lib/routes';
 
 interface AdminFlowProps {
     onLogout: () => void;
@@ -35,10 +37,18 @@ interface AdminFlowProps {
 }
 
 const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userProfile }) => {
-    const [activeTab, setActiveTab] = useState('dashboard');
     const [processes, setProcesses] = useState<ApprovalProcess[]>([]);
     const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
     const [loadingProcesses, setLoadingProcesses] = useState(false);
+
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Derive activeTab from URL
+    const pathParts = location.pathname.split('/').filter(Boolean);
+    // URL: /admin/<slug>
+    const slug = pathParts[1] || 'dashboard';
+    const activeTab = getTabFromSlug('admin', slug);
 
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
 
@@ -69,9 +79,8 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
     };
 
     const handleUpdateStepStatus = async (stepId: string, status: 'approved' | 'rejected', reason?: string) => {
-        // stepId format: "<contractId>-<stepType>"
         const parts = stepId.split('-');
-        const stepType = parts[parts.length - 1]; // comprovante, perfil, or assinatura
+        const stepType = parts[parts.length - 1];
         const contractId = selectedProcessId;
 
         if (!contractId) return;
@@ -85,7 +94,6 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
 
             if (!res.ok) throw new Error('Falha ao atualizar step');
 
-            // Update local state
             setProcesses(prev => prev.map(p => {
                 if (p.id === contractId) {
                     return {
@@ -114,7 +122,6 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
 
             if (!res.ok) throw new Error('Falha ao finalizar processo');
 
-            // Update local state
             setProcesses(prev => prev.map(p => {
                 if (p.id === contractId) {
                     return {
@@ -132,10 +139,16 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
         }
     };
 
+    const handleTabChange = (tabId: string) => {
+        const path = getRoutePath('admin', tabId);
+        navigate(path);
+        if (tabId !== 'approval') setSelectedProcessId(null);
+    };
+
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard':
-                return <AdminDashboard onViewAllContracts={() => setActiveTab('contracts')} />;
+                return <AdminDashboard onViewAllContracts={() => handleTabChange('contracts')} />;
             case 'simulation':
                 return <Simulator onOpen={onOpenSimulator} />;
             case 'approval':
@@ -224,10 +237,7 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
         <DashboardLayout
             sidebarItems={adminMenu}
             activeTab={activeTab}
-            onTabChange={(tab) => {
-                setActiveTab(tab);
-                if (tab !== 'approval') setSelectedProcessId(null);
-            }}
+            onTabChange={handleTabChange}
             user={{
                 name: userProfile?.nome_fantasia || userProfile?.razao_social || userProfile?.nome || 'Administrador',
                 email: userProfile?.email || 'admin@fncdcapital.com',

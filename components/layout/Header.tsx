@@ -1,17 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { Bell, User } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Bell, User, LogOut } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface HeaderProps {
     user: {
+        name?: string;
+        email?: string;
         avatarUrl?: string;
     };
     activeTab: string;
     onNotificationClick: () => void;
+    onLogout?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ user, activeTab, onNotificationClick }) => {
+const Header: React.FC<HeaderProps> = ({ user, activeTab, onNotificationClick, onLogout }) => {
     const [hasUnread, setHasUnread] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         const checkUnread = async () => {
@@ -22,14 +27,13 @@ const Header: React.FC<HeaderProps> = ({ user, activeTab, onNotificationClick })
                 .from('notificacoes')
                 .select('*', { count: 'exact', head: true })
                 .eq('user_id', authUser.id)
-                .eq('is_read', false); // Only count unread
+                .eq('is_read', false);
 
             setHasUnread(count !== null && count > 0);
         };
 
         checkUnread();
 
-        // Subscribe to changes
         const channel = supabase
             .channel('header_notifications')
             .on(
@@ -50,20 +54,25 @@ const Header: React.FC<HeaderProps> = ({ user, activeTab, onNotificationClick })
         };
     }, []);
 
-    // Re-check when activeTab changes (e.g. user goes to notifications page)
     useEffect(() => {
         if (activeTab === 'notifications') {
-            // Give it a moment for the view to mark as read, then check again
-            const timer = setTimeout(() => {
-                // If we are on the notifications page, we might assume they are being read, 
-                // but strictly speaking we should only clear the dot if they are actually marked as read in DB.
-                // The NotificationsView component handles marking as read.
-                // This check ensures sync.
-            }, 1000);
+            const timer = setTimeout(() => { }, 1000);
             return () => clearTimeout(timer);
         }
     }, [activeTab]);
 
+    // Close menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(false);
+            }
+        };
+        if (menuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [menuOpen]);
 
     return (
         <header className="bg-white border-b border-slate-100 px-8 h-20 flex items-center justify-end gap-6 z-10">
@@ -76,13 +85,67 @@ const Header: React.FC<HeaderProps> = ({ user, activeTab, onNotificationClick })
                     <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
                 )}
             </button>
-            <button className="w-10 h-10 rounded-full border-2 border-slate-100 flex items-center justify-center text-[#002B49] hover:bg-slate-50 transition-colors overflow-hidden">
-                {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                    <User size={20} className="text-slate-400" />
+
+            {/* Profile avatar + dropdown */}
+            <div className="relative" ref={menuRef}>
+                <button
+                    onClick={() => setMenuOpen(!menuOpen)}
+                    className="w-10 h-10 rounded-full border-2 border-slate-100 flex items-center justify-center text-[#002B49] hover:bg-slate-50 transition-colors overflow-hidden"
+                >
+                    {user.avatarUrl ? (
+                        <img src={user.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                        <User size={20} className="text-slate-400" />
+                    )}
+                </button>
+
+                {menuOpen && (
+                    <div
+                        className="absolute right-0 top-[calc(100%+8px)] w-64 bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden z-50"
+                        style={{ animation: 'fadeIn 0.15s ease-out' }}
+                    >
+                        {/* User info */}
+                        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                {user.avatarUrl ? (
+                                    <img src={user.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    <User size={20} className="text-slate-400" />
+                                )}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-sm font-semibold text-[#002B49] truncate">
+                                    {user.name || 'Usuário'}
+                                </p>
+                                <p className="text-xs text-slate-400 truncate">
+                                    {user.email || ''}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Logout button */}
+                        {onLogout && (
+                            <button
+                                onClick={() => {
+                                    setMenuOpen(false);
+                                    onLogout();
+                                }}
+                                className="w-full px-4 py-3 flex items-center gap-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                            >
+                                <LogOut size={16} className="text-slate-400" />
+                                Sair
+                            </button>
+                        )}
+                    </div>
                 )}
-            </button>
+            </div>
+
+            <style>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(-4px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
         </header>
     );
 };

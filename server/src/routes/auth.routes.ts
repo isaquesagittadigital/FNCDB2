@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-// import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 const loginSchema = z.object({
     email: z.string().email(),
@@ -12,13 +12,13 @@ export async function authRoutes(server: FastifyInstance) {
         try {
             const { email, password } = loginSchema.parse(request.body);
 
-            // Create a scoped client for this request context
-            // This ensures the session is isolated and properly applied for RLS
+            // Create a scoped client for authentication using ANON key
+            // This ensures the returned session tokens are compatible with the frontend anon key client
             const { createClient } = await import('@supabase/supabase-js');
             const supabaseUrl = process.env.SUPABASE_URL!;
-            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!; // Using the key from env (which might be anon, but that's fine for this flow)
+            const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY!;
 
-            const scopedSupabase = createClient(supabaseUrl, supabaseKey, {
+            const scopedSupabase = createClient(supabaseUrl, supabaseAnonKey, {
                 auth: {
                     autoRefreshToken: false,
                     persistSession: false
@@ -34,9 +34,9 @@ export async function authRoutes(server: FastifyInstance) {
                 return reply.status(401).send({ error: error.message });
             }
 
-            // Fetch user profile from public schema using the AUTHENTICATED client
-            // Because scopedSupabase just signed in, it has the session.
-            const { data: profile, error: profileError } = await scopedSupabase
+            // Use the global supabase client (service_role) to fetch profile
+            // This bypasses RLS, ensuring the profile is always found
+            const { data: profile, error: profileError } = await supabase
                 .from('usuarios')
                 .select('*')
                 .eq('id', data.user.id)
@@ -52,8 +52,8 @@ export async function authRoutes(server: FastifyInstance) {
                 return reply.status(403).send({ error: 'Sua conta está inativa. Entre em contato com o suporte.' });
             }
 
-            // Fetch permissions
-            const { data: permissions, error: permError } = await scopedSupabase
+            // Fetch permissions using service_role client (bypasses RLS)
+            const { data: permissions, error: permError } = await supabase
                 .from('permissoes_usuario')
                 .select('*')
                 .eq('user_id', data.user.id);

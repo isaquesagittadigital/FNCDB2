@@ -3,9 +3,10 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import dotenv from 'dotenv';
+import path from 'path';
 import { supabase } from './lib/supabase';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
 
 const server: FastifyInstance = Fastify({
     logger: true

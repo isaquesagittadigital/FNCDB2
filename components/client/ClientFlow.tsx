@@ -6,6 +6,7 @@ import {
     User,
     FolderOpen
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import DashboardLayout from '../layout/DashboardLayout';
 import ClientDashboard from './ClientDashboard';
@@ -17,6 +18,7 @@ import DocumentsView from '../shared/DocumentsView';
 import ProfileView from '../shared/ProfileView';
 
 import { clientMenu } from './menu';
+import { getTabFromSlug, getRoutePath } from '../../lib/routes';
 
 interface ClientFlowProps {
     onLogout: () => void;
@@ -24,14 +26,18 @@ interface ClientFlowProps {
 }
 
 const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout, userProfile }) => {
-    const [activeTab, setActiveTab] = useState('dashboard');
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const location = useLocation();
+    const navigate = useNavigate();
+
+    // Derive activeTab from URL
+    const pathParts = location.pathname.split('/').filter(Boolean);
+    // URL: /cliente/<slug>
+    const slug = pathParts[1] || 'dashboard';
+    const activeTab = getTabFromSlug('client', slug);
 
     useEffect(() => {
         if (userProfile) {
-            // DB is the source of truth. 
-            // If onboarding_finalizado is explicitly true, show dashboard.
-            // Otherwise, show onboarding.
             if (userProfile.onboarding_finalizado === true) {
                 setShowOnboarding(false);
             } else {
@@ -41,21 +47,23 @@ const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout, userProfile }) => {
     }, [userProfile]);
 
     const handleOnboardingFinish = () => {
-        // Optimistically update local state to show dashboard
         setShowOnboarding(false);
-        // Optionally update the userProfile in parent if possible, but for now this hides the onboarding
     };
 
     if (showOnboarding) {
         return <ClientOnboarding onFinish={handleOnboardingFinish} />;
     }
 
+    const handleTabChange = (tabId: string) => {
+        const path = getRoutePath('client', tabId);
+        navigate(path);
+    };
+
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <ClientDashboard />;
             case 'calendar': return <CalendarView role="client" userId={userProfile?.id} />;
             case 'notifications': return <NotificationsView />;
-
             case 'documents': return <DocumentsView userProfile={userProfile} />;
             case 'profile': return <ProfileView />;
             default:
@@ -71,7 +79,7 @@ const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout, userProfile }) => {
         <DashboardLayout
             sidebarItems={clientMenu}
             activeTab={activeTab}
-            onTabChange={setActiveTab}
+            onTabChange={handleTabChange}
             user={{
                 name: userProfile?.nome_fantasia || userProfile?.razao_social || userProfile?.nome || 'Cliente',
                 email: userProfile?.email || 'cliente@fncdcapital.com'

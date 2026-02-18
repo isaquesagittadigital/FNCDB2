@@ -21,7 +21,11 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ContractModal from '../shared/modals/ContractModal';
-import ContractDetailModal from '../shared/ContractDetailModal';
+import ConsultantContractDetailModal from './modals/ConsultantContractDetailModal';
+
+
+import ContractStatusBadge from '../shared/ui/ContractStatusBadge';
+import { CONTRACT_STATUSES } from '../../lib/contractStatus';
 import { calculateContractProjection, ContractSimulation, PaymentInstallment } from '../../lib/financialUtils';
 import { format, isValid, parseISO } from 'date-fns';
 
@@ -437,23 +441,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
     }
   };
 
-  const StatusBadge = ({ status }: { status: string }) => {
-    const styles: Record<string, string> = {
-      'Rascunho': 'bg-slate-100 text-slate-500 border-slate-200',
-      'Assinando': 'bg-[#FFF8E1] text-[#F59E0B] border-[#F59E0B]/10',
-      'Processando': 'bg-[#E0F2FE] text-[#0284C7] border-[#0284C7]/10',
-      'Vigente': 'bg-[#E6FBF1] text-[#27C27B] border-[#27C27B]/10',
-      'Reprovado': 'bg-[#FFF5F2] text-[#FF7A59] border-[#FF7A59]/10',
-      'Confirmado': 'bg-[#E6FBF1] text-[#27C27B] border-[#27C27B]/10',
-      'Rejeitado': 'bg-[#FFF5F2] text-[#FF7A59] border-[#FF7A59]/10',
-      'Pendente': 'bg-[#FFFBEB] text-[#B45309] border-[#B45309]/10'
-    };
-    return (
-      <span className={`px-4 py-1.5 rounded-full text-[10px] font-bold border ${styles[status] || 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-        {status}
-      </span>
-    );
-  };
+
 
   const userClient = clients.find(c => c.id === formData.clientId);
 
@@ -562,11 +550,9 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/30 focus:border-[#00A3B1] transition-all"
                   >
                     <option value="">Selecionar status</option>
-                    <option value="Ativo">Ativo</option>
-                    <option value="Pendente">Pendente</option>
-                    <option value="Vencido">Vencido</option>
-                    <option value="Rejeitado">Rejeitado</option>
-                    <option value="Cancelado">Cancelado</option>
+                    {CONTRACT_STATUSES.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -649,10 +635,10 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                     {loading ? (
                       <tr><td colSpan={8} className="p-8 text-center text-slate-400">Carregando...</td></tr>
                     ) : filteredContracts.map((c, i) => (
-                      <tr key={i} className="text-sm hover:bg-slate-50 transition-colors group">
+                      <tr key={i} onClick={() => setSelectedContract(c.fullData)} className="text-sm hover:bg-slate-50 transition-colors group cursor-pointer">
                         <td className="px-6 py-5 font-bold text-[#002B49]">{c.id}</td>
                         <td className="px-6 py-5 text-slate-600">{c.fullData?.usuarios?.nome_completo || '-'}</td>
-                        <td className="px-6 py-5"><StatusBadge status={c.status} /></td>
+                        <td className="px-6 py-5"><ContractStatusBadge status={c.status} /></td>
                         <td className="px-6 py-5 text-[#002B49] font-bold">{c.amount}</td>
                         <td className="px-6 py-5 text-slate-500">{c.yield}</td>
                         <td className="px-6 py-5 text-slate-400">{c.date}</td>
@@ -684,16 +670,8 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                                 </button>
                               </>
                             )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedContract(c.fullData);
-                              }}
-                              title="Ver contrato"
-                              className="p-2 text-slate-400 hover:text-[#002B49] hover:bg-slate-100 rounded-lg transition-colors"
-                            >
-                              <Eye size={16} />
-                            </button>
+
+
                           </div>
                         </td>
                       </tr>
@@ -1040,14 +1018,16 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
         )}
       </AnimatePresence>
 
-      {/* Contract Detail Modal */}
+
+
+      {/* Contract Detail Modal (Consultant Version) */}
       {selectedContract && (
-        <ContractDetailModal
+        <ConsultantContractDetailModal
           contract={selectedContract}
           onClose={() => setSelectedContract(null)}
+          role="consultant"
         />
       )}
-
     </div>
   );
 };
