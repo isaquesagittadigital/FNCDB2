@@ -82,8 +82,8 @@ const ConfirmDialog = ({
                             onClick={onConfirm}
                             disabled={loading}
                             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white rounded-xl transition-all active:scale-[0.98] disabled:opacity-60 ${danger
-                                    ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
-                                    : 'bg-[#00A3B1] hover:bg-[#008c99] shadow-lg shadow-[#00A3B1]/20'
+                                ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20'
+                                : 'bg-[#00A3B1] hover:bg-[#008c99] shadow-lg shadow-[#00A3B1]/20'
                                 }`}
                         >
                             {loading && <Loader2 size={14} className="animate-spin" />}
@@ -290,11 +290,8 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                         transition={{ type: 'spring', duration: 0.4, bounce: 0.15 }}
                         className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl relative my-8 pointer-events-auto"
                     >
-                        {/* Top accent bar */}
-                        <div className="h-1 w-full bg-gradient-to-r from-[#00A3B1] via-[#00c4d4] to-[#00A3B1] rounded-t-2xl" />
-
                         {/* Header */}
-                        <div className="flex items-center justify-between px-6 py-5">
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
                             <div className="flex items-center gap-3.5">
                                 <div className="w-11 h-11 bg-gradient-to-br from-[#00A3B1] to-[#008c99] rounded-xl flex items-center justify-center shadow-lg shadow-[#00A3B1]/20">
                                     <FileText className="text-white" size={20} />
@@ -468,8 +465,8 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                                 {/* Icon with connection line */}
                                                 <div className="relative">
                                                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${process.status === 'approved'
-                                                            ? 'bg-emerald-50 border border-emerald-200 shadow-sm shadow-emerald-100'
-                                                            : 'bg-amber-50 border border-amber-200 shadow-sm shadow-amber-100'
+                                                        ? 'bg-emerald-50 border border-emerald-200 shadow-sm shadow-emerald-100'
+                                                        : 'bg-amber-50 border border-amber-200 shadow-sm shadow-amber-100'
                                                         }`}>
                                                         {process.status === 'approved' ? (
                                                             <CheckCircle2 size={16} className="text-emerald-500" />
@@ -487,8 +484,8 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                                 </div>
                                             </div>
                                             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap ${process.status === 'approved'
-                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                                                    : 'bg-amber-50 text-amber-600 border border-amber-200'
+                                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                                                : 'bg-amber-50 text-amber-600 border border-amber-200'
                                                 }`}>
                                                 {process.status === 'approved' ? (
                                                     <><CheckCircle2 size={11} /> Aprovado</>
