@@ -8,6 +8,7 @@ interface Notification {
   id: number;
   title: string;
   content: string;
+  type?: string;
   is_read: boolean;
   created_at: string;
 }
@@ -136,21 +137,31 @@ const NotificationsView: React.FC = () => {
           filteredNotifications.map((notification) => (
             <div
               key={notification.id}
-              className={`bg-white border rounded-2xl p-6 flex items-center justify-between shadow-sm hover:shadow-md transition-all group ${!notification.is_read ? 'border-[#E6F6F7] bg-slate-50' : 'border-slate-100'}`}
+              className={`bg-white border rounded-2xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm hover:shadow-md transition-all group ${!notification.is_read ? 'border-[#E6F6F7] bg-slate-50' : 'border-slate-100'}`}
             >
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  {!notification.is_read && (
-                    <span className="bg-[#E6F6F7] text-[#00A3B1] text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      Novo
-                    </span>
-                  )}
-                  <h4 className="text-sm font-bold text-[#002B49]">{notification.title}</h4>
-                  <span className="text-[10px] text-slate-400 ml-2">
+              <div className="space-y-3 w-full">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-left">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {!notification.is_read && (
+                      <span className="bg-[#E6F6F7] text-[#00A3B1] text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0">
+                        Novo
+                      </span>
+                    )}
+                    {notification.type && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${notification.type === 'Contrato' ? 'bg-blue-50 text-blue-600' :
+                        notification.type === 'Pagamento' ? 'bg-emerald-50 text-emerald-600' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                        {notification.type}
+                      </span>
+                    )}
+                    <h4 className="text-sm font-bold text-[#002B49] leading-tight">{notification.title}</h4>
+                  </div>
+                  <span className="text-[10px] text-slate-400 sm:ml-auto">
                     {new Date(notification.created_at).toLocaleDateString()} {new Date(notification.created_at).toLocaleTimeString().slice(0, 5)}
                   </span>
                 </div>
-                <p className="text-xs text-[#64748B] font-medium">{notification.content}</p>
+                <p className="text-xs text-[#64748B] font-medium leading-relaxed">{notification.content}</p>
               </div>
 
               <button
@@ -158,7 +169,7 @@ const NotificationsView: React.FC = () => {
                   setSelectedNotification(notification);
                   if (!notification.is_read) markAsRead(notification.id);
                 }}
-                className="text-xs font-bold text-[#00A3B1] hover:underline whitespace-nowrap ml-4"
+                className="text-xs font-bold text-[#00A3B1] hover:underline whitespace-nowrap self-end sm:self-center sm:ml-4"
               >
                 Ver notificação
               </button>

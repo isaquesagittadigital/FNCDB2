@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { supabase } from '../lib/supabase';
 import { z } from 'zod';
 import { sendWelcomeEmail, sendRenewalRequestEmail, sendRedeemRequestEmail } from '../services/email.service';
-import { createContractEnvelope, getEnvelopeDetails, createWebhook, listWebhooks, deleteWebhook } from '../services/clicksign';
+import { createContractEnvelope, getEnvelopeDetails, getEnvelopeDocuments, downloadSignedDocument, createWebhook, listWebhooks, deleteWebhook } from '../services/clicksign';
 import { generateFullContractPdf } from '../services/contract-template';
 import crypto from 'crypto';
 
@@ -655,9 +655,14 @@ export async function adminRoutes(server: FastifyInstance) {
         const { id } = request.params;
         const body = request.body;
         try {
+            // Fetch old contract to detect status change
+            const { data: oldContract } = await supabase
+                .from('contratos')
+                .select('status, titulo, user_id')
+                .eq('id', id)
+                .single();
+
             delete body.id; // protect ID
-            // Allow user_id update if explicitly needed, but usually kept for safety.
-            // For now, let's just pass the body as is (Supabase update is partial).
 
             const { data, error } = await supabase
                 .from('contratos')
@@ -667,6 +672,40 @@ export async function adminRoutes(server: FastifyInstance) {
                 .single();
 
             if (error) throw error;
+
+            // Notify client on status changes
+            if (data?.user_id && body.status && oldContract?.status !== body.status) {
+                const statusMessages: Record<string, { title: string; content: string }> = {
+                    'Assinando': {
+                        title: 'Contrato Pronto para Assinatura',
+                        content: `Seu contrato "${data.titulo}" está pronto para assinatura. Acesse seus documentos para assinar.`
+                    },
+                    'Vigente': {
+                        title: 'Contrato Assinado com Sucesso',
+                        content: `Seu contrato "${data.titulo}" foi assinado e está vigente.`
+                    },
+                    'Cancelado': {
+                        title: 'Contrato Cancelado',
+                        content: `Seu contrato "${data.titulo}" foi cancelado.`
+                    },
+                    'Finalizado': {
+                        title: 'Contrato Finalizado',
+                        content: `Seu contrato "${data.titulo}" foi finalizado com sucesso.`
+                    }
+                };
+
+                const msg = statusMessages[body.status];
+                if (msg) {
+                    await supabase.from('notificacoes').insert({
+                        user_id: data.user_id,
+                        type: 'Contrato',
+                        title: msg.title,
+                        content: msg.content,
+                        is_read: false
+                    });
+                }
+            }
+
             return reply.send(data);
         } catch (err: any) {
             return reply.status(500).send({ error: err.message });
@@ -763,7 +802,7 @@ export async function adminRoutes(server: FastifyInstance) {
     // Calendar Payments (GET - Fetch)
     server.get('/calendar-payments', async (request: any, reply) => {
         try {
-            const { consultor_id, cliente_id, month, year } = request.query;
+            const { consultor_id, cliente_id, contrato_id, month, year } = request.query;
             const supabaseUrl = process.env.SUPABASE_URL;
             const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -772,6 +811,9 @@ export async function adminRoutes(server: FastifyInstance) {
             params.append('select', '*');
             params.append('order', 'data.asc');
 
+            if (contrato_id) {
+                params.append('contrato_id', `eq.${contrato_id}`);
+            }
             if (consultor_id) {
                 params.append('consultor_id', `eq.${consultor_id}`);
             }
@@ -807,7 +849,31 @@ export async function adminRoutes(server: FastifyInstance) {
             }
 
             const data = (await res.json()) as any[];
+
+            // For client role, only show payments from Vigente contracts
+            if (cliente_id) {
+                // Fetch vigente contract IDs for this client
+                const contratosRes = await fetch(
+                    `${supabaseUrl}/rest/v1/contratos?select=id&user_id=eq.${cliente_id}&status=eq.Vigente`,
+                    {
+                        headers: {
+                            'apikey': serviceKey!,
+                            'Authorization': `Bearer ${serviceKey}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                if (contratosRes.ok) {
+                    const contratos = (await contratosRes.json()) as { id: string }[];
+                    const vigenteIds = new Set(contratos.map(c => c.id));
+                    const filtered = data.filter(p => vigenteIds.has(p.contrato_id));
+                    return reply.send(filtered);
+                }
+            }
+
             return reply.send(data);
+
         } catch (err: any) {
             server.log.error(err);
             return reply.status(500).send({ error: err.message });
@@ -982,28 +1048,99 @@ export async function adminRoutes(server: FastifyInstance) {
     server.get('/contracts/:id/pdf', async (request: any, reply) => {
         try {
             const { id } = request.params;
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-            // Fetch contract
-            const { data: contract, error: contractError } = await supabase
-                .from('contratos')
-                .select('*')
-                .eq('id', id)
-                .single();
+            // Fetch contract via direct REST API to bypass schema cache
+            const contractRes = await fetch(
+                `${supabaseUrl}/rest/v1/contratos?id=eq.${id}&select=*&limit=1`,
+                {
+                    headers: {
+                        'apikey': serviceKey!,
+                        'Authorization': `Bearer ${serviceKey}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
 
-            if (contractError || !contract) {
+            if (!contractRes.ok) {
+                const errText = await contractRes.text();
+                console.error('Contract fetch error:', errText);
+                return reply.status(500).send({ error: 'Erro ao buscar contrato.' });
+            }
+
+            const contracts = (await contractRes.json()) as any[];
+            const contract = contracts?.[0];
+
+            if (!contract) {
                 return reply.status(404).send({ error: 'Contrato não encontrado.' });
             }
 
-            // Fetch client data
+            // ── Check for signed Clicksign document ──────────────────────
+            if (contract.clicksign_envelope_id) {
+                try {
+                    console.log(`[PDF] Contract ${id} has Clicksign envelope: ${contract.clicksign_envelope_id}`);
+                    const envelopeDetails = await getEnvelopeDetails(contract.clicksign_envelope_id);
+                    const envelopeStatus = envelopeDetails?.data?.attributes?.status;
+                    console.log(`[PDF] Envelope status: ${envelopeStatus}`);
+
+                    // If envelope is 'closed' (all signed), download the signed PDF
+                    if (envelopeStatus === 'closed') {
+                        let documentId = contract.clicksign_document_id;
+
+                        // If we don't have the document_id stored, fetch documents from envelope
+                        if (!documentId) {
+                            const docsResult = await getEnvelopeDocuments(contract.clicksign_envelope_id);
+                            const docs = docsResult?.data || [];
+                            if (Array.isArray(docs) && docs.length > 0) {
+                                documentId = docs[0].id;
+                            } else if (docs?.id) {
+                                documentId = docs.id;
+                            }
+                        }
+
+                        if (documentId) {
+                            console.log(`[PDF] Downloading signed document ${documentId} from Clicksign...`);
+                            const signedPdfBuffer = await downloadSignedDocument(
+                                contract.clicksign_envelope_id,
+                                documentId
+                            );
+
+                            const filename = `contrato_assinado_${contract.codigo || id.substring(0, 8)}.pdf`;
+                            return reply
+                                .header('Content-Type', 'application/pdf')
+                                .header('Content-Disposition', `inline; filename="${filename}"`)
+                                .header('Content-Length', signedPdfBuffer.length)
+                                .header('X-Contract-Signed', 'true')
+                                .send(signedPdfBuffer);
+                        }
+                    }
+                    // If not closed, fall through to generate local PDF
+                    console.log(`[PDF] Envelope not closed (status: ${envelopeStatus}), generating local PDF`);
+                } catch (clicksignErr: any) {
+                    console.warn(`[PDF] Clicksign download failed, falling back to local PDF:`, clicksignErr.message);
+                }
+            }
+
+            // ── Generate local PDF (fallback or no Clicksign) ────────────
+            // Fetch client data via direct REST API
             let client: any = {};
             const clientIdField = contract.user_id || contract.cliente_id;
             if (clientIdField) {
-                const { data: clientData } = await supabase
-                    .from('usuarios')
-                    .select('*')
-                    .eq('id', clientIdField)
-                    .single();
-                if (clientData) client = clientData;
+                const clientRes = await fetch(
+                    `${supabaseUrl}/rest/v1/usuarios?id=eq.${clientIdField}&select=*&limit=1`,
+                    {
+                        headers: {
+                            'apikey': serviceKey!,
+                            'Authorization': `Bearer ${serviceKey}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+                if (clientRes.ok) {
+                    const clients = (await clientRes.json()) as any[];
+                    if (clients?.[0]) client = clients[0];
+                }
             }
 
             const clientDisplayName = client.nome_fantasia || client.razao_social || client.nome || 'Cliente';
@@ -1031,8 +1168,9 @@ export async function adminRoutes(server: FastifyInstance) {
 
             return reply
                 .header('Content-Type', 'application/pdf')
-                .header('Content-Disposition', `attachment; filename="${filename}"`)
+                .header('Content-Disposition', `inline; filename="${filename}"`)
                 .header('Content-Length', pdfBuffer.length)
+                .header('X-Contract-Signed', 'false')
                 .send(pdfBuffer);
 
         } catch (err: any) {
@@ -1855,6 +1993,25 @@ export async function adminRoutes(server: FastifyInstance) {
                 .update({ comprovante_url: publicUrl, arquivo_url: publicUrl })
                 .eq('id', id);
 
+            // Notify client about payment proof upload
+            if (record) {
+                const { data: contrato } = await supabase
+                    .from('contratos')
+                    .select('user_id, titulo, codigo')
+                    .eq('id', id)
+                    .single();
+
+                if (contrato?.user_id) {
+                    await supabase.from('notificacoes').insert({
+                        user_id: contrato.user_id,
+                        type: 'Pagamento',
+                        title: 'Comprovante de Pagamento Anexado',
+                        content: `Um comprovante de pagamento foi anexado ao seu contrato "${contrato.titulo || contrato.codigo}".`,
+                        is_read: false
+                    });
+                }
+            }
+
             return reply.send({ success: true, comprovante: record });
         } catch (err: any) {
             console.error('[Comprovantes] Upload error:', err);
@@ -2002,6 +2159,45 @@ export async function adminRoutes(server: FastifyInstance) {
                 // Don't fail the whole request if email fails
             }
 
+            // Notify client about renewal request being registered
+            if (clientId) {
+                await supabase.from('notificacoes').insert({
+                    user_id: clientId,
+                    type: 'Contrato',
+                    title: 'Solicitação de Renovação Registrada',
+                    content: `Sua solicitação de renovação do contrato "${contractCode}" foi registrada e enviada ao consultor para análise.`,
+                    is_read: false
+                });
+            }
+
+            // Notify consultant about renewal request
+            if (consultorId) {
+                await supabase.from('notificacoes').insert({
+                    user_id: consultorId,
+                    type: 'Contrato',
+                    title: 'Nova Solicitação de Renovação',
+                    content: `O cliente ${clientName} solicitou a renovação do contrato "${contractCode}". Verifique e tome a ação necessária.`,
+                    is_read: false
+                });
+            }
+
+            // Notify all admins about renewal request
+            const { data: admins } = await supabase
+                .from('usuarios')
+                .select('id')
+                .in('tipo_perfil_usuario', ['Admin', 'Super Admin']);
+
+            if (admins && admins.length > 0) {
+                const adminNotifs = admins.map((admin: any) => ({
+                    user_id: admin.id,
+                    type: 'Contrato',
+                    title: 'Nova Solicitação de Renovação',
+                    content: `O cliente ${clientName} solicitou a renovação do contrato "${contractCode}". Consultor: ${consultantName}.`,
+                    is_read: false
+                }));
+                await supabase.from('notificacoes').insert(adminNotifs);
+            }
+
             return reply.send({
                 success: true,
                 renewal: renewal,
@@ -2115,6 +2311,45 @@ export async function adminRoutes(server: FastifyInstance) {
             } catch (emailErr: any) {
                 server.log.error(`[Redeem] Email failed: ${emailErr.message}`);
                 // Don't fail the whole request if email fails
+            }
+
+            // Notify client about redeem request being registered
+            if (clientId) {
+                await supabase.from('notificacoes').insert({
+                    user_id: clientId,
+                    type: 'Contrato',
+                    title: 'Solicitação de Resgate Registrada',
+                    content: `Sua solicitação de resgate (${body.resgate_integral ? 'Integral' : 'Parcial'} - ${redeemValueFmt}) do contrato "${contractCode}" foi registrada e enviada ao consultor.`,
+                    is_read: false
+                });
+            }
+
+            // Notify consultant about redeem request
+            if (consultorId) {
+                await supabase.from('notificacoes').insert({
+                    user_id: consultorId,
+                    type: 'Contrato',
+                    title: 'Nova Solicitação de Resgate',
+                    content: `O cliente ${clientName} solicitou resgate (${body.resgate_integral ? 'Integral' : 'Parcial'} - ${redeemValueFmt}) do contrato "${contractCode}". Verifique e tome a ação necessária.`,
+                    is_read: false
+                });
+            }
+
+            // Notify all admins about redeem request
+            const { data: adminUsers } = await supabase
+                .from('usuarios')
+                .select('id')
+                .in('tipo_perfil_usuario', ['Admin', 'Super Admin']);
+
+            if (adminUsers && adminUsers.length > 0) {
+                const adminNotifs = adminUsers.map((admin: any) => ({
+                    user_id: admin.id,
+                    type: 'Contrato',
+                    title: 'Nova Solicitação de Resgate',
+                    content: `O cliente ${clientName} solicitou resgate (${body.resgate_integral ? 'Integral' : 'Parcial'} - ${redeemValueFmt}) do contrato "${contractCode}". Consultor: ${consultantName}.`,
+                    is_read: false
+                }));
+                await supabase.from('notificacoes').insert(adminNotifs);
             }
 
             return reply.send({

@@ -8,6 +8,7 @@ import RenewalConfirmModal from './modals/RenewalConfirmModal';
 import RenewalViewModal from './modals/RenewalViewModal';
 import RedeemRequestModal from './modals/RedeemRequestModal';
 import RedeemViewModal from './modals/RedeemViewModal';
+import KYCDocumentModal from './KYCDocumentModal';
 
 export type ContractModalRole = 'client' | 'consultant' | 'admin';
 
@@ -129,6 +130,7 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
     const [existingRedeem, setExistingRedeem] = useState<any>(null);
     const [showRedeemModal, setShowRedeemModal] = useState(false);
     const [showRedeemView, setShowRedeemView] = useState(false);
+    const [showKYCModal, setShowKYCModal] = useState(false);
 
     const isClient = role === 'client';
     const isAdmin = role === 'admin';
@@ -138,6 +140,7 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
     useEffect(() => {
         if (contract) {
             fetchRelatedData();
+            fetchDividends();
             if (canManageComprovantes) {
                 fetchComprovantes();
             }
@@ -190,8 +193,7 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                     setConsultorData(consultant);
                 }
 
-                // Calculate installments for client view
-                calculateInstallments();
+
             } else {
                 // Admin/Consultant: fetch from API (bypasses RLS)
                 if (contract.user_id) {
@@ -238,79 +240,41 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
         }
     };
 
-    const calculateInstallments = () => {
+    const fetchDividends = async () => {
         try {
-            const calculatedInstallments: any[] = [];
-            const rawStartDate = contract.startDate || contract.data_inicio;
-            if (!rawStartDate) return;
+            const contractId = contract.id || contract.raw?.id;
+            if (!contractId) return;
 
-            let startDate: Date;
-            if (typeof rawStartDate === 'string' && rawStartDate.includes('/')) {
-                startDate = new Date(rawStartDate.split('/').reverse().join('-'));
-            } else {
-                startDate = new Date(rawStartDate);
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
+            const res = await fetch(`${apiUrl}/admin/calendar-payments?contrato_id=${contractId}`);
+
+            if (!res.ok) {
+                console.error('Failed to fetch dividends');
+                return;
             }
 
-            const rawAmount = contract.amount || contract.valor_aporte;
-            let amount: number;
-            if (typeof rawAmount === 'string') {
-                amount = parseFloat(rawAmount.replace('R$', '').replace(/\./g, '').replace(',', '.').trim());
-            } else {
-                amount = Number(rawAmount) || 0;
-            }
+            const data = await res.json();
 
-            const rawYield = contract.yield || contract.taxa_mensal;
-            let rate: number;
-            if (typeof rawYield === 'string') {
-                rate = parseFloat(rawYield.replace('%', '').replace(',', '.').trim()) / 100;
-            } else {
-                rate = (Number(rawYield) || 0) / 100;
-            }
+            // Filter only client dividends (dividendos_clientes === true)
+            const clientDividends = data.filter((p: any) => p.dividendos_clientes === true);
 
-            const rawPeriod = contract.period || contract.periodo_meses;
-            let months: number;
-            if (typeof rawPeriod === 'string') {
-                months = parseInt(rawPeriod.replace(' meses', ''));
-            } else {
-                months = Number(rawPeriod) || 12;
-            }
-
-            // Parcela 0 (Aporte)
-            calculatedInstallments.push({
-                parcela: 0,
-                data: startDate.toLocaleDateString('pt-BR'),
-                status: 'Pago',
-                valor: amount,
-                isAporte: true
+            // Map to installment format for rendering
+            const mapped = clientDividends.map((p: any, idx: number) => {
+                const dateStr = p.data ? new Date(p.data).toLocaleDateString('pt-BR') : '-';
+                return {
+                    parcela: idx,
+                    data: dateStr,
+                    status: p.pago ? 'Pago' : 'Pendente',
+                    valor: p.valor || 0,
+                    evento: p.evento || '',
+                    isAporte: (p.evento || '').toLowerCase().includes('aporte'),
+                    isPrincipalReturn: (p.evento || '').toLowerCase().includes('resgate') || (p.evento || '').toLowerCase().includes('principal'),
+                };
             });
 
-            // Monthly installments
-            for (let i = 1; i <= months; i++) {
-                const date = new Date(startDate);
-                date.setMonth(startDate.getMonth() + i);
-                calculatedInstallments.push({
-                    parcela: i,
-                    data: date.toLocaleDateString('pt-BR'),
-                    status: 'Pendente',
-                    valor: amount * rate,
-                    isAporte: false
-                });
-            }
-
-            // Final payment (return of principal)
-            const finalDate = new Date(startDate);
-            finalDate.setMonth(startDate.getMonth() + months);
-            calculatedInstallments.push({
-                parcela: months + 1,
-                data: finalDate.toLocaleDateString('pt-BR'),
-                status: 'Pendente',
-                valor: amount,
-                isPrincipalReturn: true
-            });
-
-            setInstallments(calculatedInstallments);
+            setInstallments(mapped);
         } catch (err) {
-            console.error('Error calculating installments:', err);
+            console.error('Error fetching dividends:', err);
         }
     };
 
@@ -582,7 +546,9 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                         className="flex items-center gap-2 text-[#00A3B1] text-sm font-bold hover:opacity-80 transition-opacity disabled:opacity-50"
                                     >
                                         {viewingPdf ? (
-                                            <><Loader2 size={18} className="animate-spin" /> Gerando...</>
+                                            <><Loader2 size={18} className="animate-spin" /> Carregando...</>
+                                        ) : contract.clicksign_envelope_id && contract.data_assinatura ? (
+                                            <><CheckCircle2 size={18} className="text-green-500" /> Ver Assinado</>
                                         ) : (
                                             <><Eye size={20} /> Visualizar</>
                                         )}
@@ -725,6 +691,13 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                             <InfoField label="Email">
                                                 <span className="text-xs">{clientData?.email || userProfile?.email || '-'}</span>
                                             </InfoField>
+                                            <button
+                                                onClick={() => setShowKYCModal(true)}
+                                                className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-[#00A3B1] bg-[#E6F6F7] hover:bg-[#d0eff1] rounded-lg transition-colors border border-[#00A3B1]/20"
+                                            >
+                                                <FileText size={13} />
+                                                Ver Formulário KYC
+                                            </button>
                                         </div>
                                     )}
                                 </SectionCard>
@@ -934,63 +907,52 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                 </SectionCard>
                             )}
 
-                            {/* Contracts attachment - Client */}
-                            {isClient && (
-                                <SectionCard title="Anexar contratos" icon={<FileText size={15} />}>
-                                    <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-4 bg-slate-50/50 hover:bg-slate-50 transition-colors cursor-pointer group">
-                                        <div className="w-12 h-12 bg-[#E6F6F7] rounded-full flex items-center justify-center text-[#00A3B1] group-hover:scale-110 transition-transform">
-                                            <FileText size={20} />
+
+
+                            {/* Dividends - Only visible for Vigente contracts */}
+                            {(contract.status === 'Vigente' || installments.length > 0) && (
+                                <SectionCard title="Dividendos do cliente" icon={<DollarSign size={15} />}>
+                                    {installments.length > 0 ? (
+                                        <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm overflow-x-auto">
+                                            <table className="w-full text-left min-w-[600px]">
+                                                <thead className="bg-[#F8FAFB] border-b border-slate-100">
+                                                    <tr className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                                                        <th className="px-6 py-4">Parcela</th>
+                                                        <th className="px-6 py-4">Data de vencimento</th>
+                                                        <th className="px-6 py-4">Status</th>
+                                                        <th className="px-6 py-4 text-right">Valor dividendo</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-50">
+                                                    {installments.map((inst, idx) => (
+                                                        <tr key={idx} className="hover:bg-slate-50 text-sm">
+                                                            <td className="px-6 py-4 font-medium text-slate-600">
+                                                                {inst.isAporte ? 'Aporte' : inst.isPrincipalReturn ? 'Resgate Principal' : inst.evento || inst.parcela}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-slate-500">{inst.data}</td>
+                                                            <td className="px-6 py-4">
+                                                                <span className={`text-sm font-bold px-4 py-1 rounded-full ${inst.status === 'Pago' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                                    {inst.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right font-bold text-[#002B49]">
+                                                                {formatCurrency(inst.valor)}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         </div>
-                                        <div>
-                                            <p className="text-sm font-bold text-[#002B49]">Nenhum contrato anexado.</p>
-                                            <p className="text-xs text-slate-400 mt-1">Anexe um contrato assinado pelas partes envolvidas</p>
-                                        </div>
-                                    </div>
+                                    ) : (
+                                        <EmptyState
+                                            icon={<DollarSign className="text-emerald-500" size={20} />}
+                                            iconBg="bg-emerald-50"
+                                            title="Nenhum registro encontrado"
+                                            subtitle="Os dividendos serão exibidos quando houver pagamentos registrados."
+                                        />
+                                    )}
                                 </SectionCard>
                             )}
-
-                            {/* Dividends */}
-                            <SectionCard title="Dividendos do cliente" icon={<DollarSign size={15} />}>
-                                {isClient && installments.length > 0 ? (
-                                    <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm overflow-x-auto">
-                                        <table className="w-full text-left min-w-[600px]">
-                                            <thead className="bg-[#F8FAFB] border-b border-slate-100">
-                                                <tr className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
-                                                    <th className="px-6 py-4">Parcela</th>
-                                                    <th className="px-6 py-4">Data de vencimento</th>
-                                                    <th className="px-6 py-4">Status</th>
-                                                    <th className="px-6 py-4 text-right">Valor dividendo</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-slate-50">
-                                                {installments.map((inst, idx) => (
-                                                    <tr key={idx} className="hover:bg-slate-50 text-sm">
-                                                        <td className="px-6 py-4 font-medium text-slate-600">
-                                                            {inst.isAporte ? 'Aporte' : inst.isPrincipalReturn ? 'Resgate Principal' : inst.parcela}
-                                                        </td>
-                                                        <td className="px-6 py-4 text-slate-500">{inst.data}</td>
-                                                        <td className="px-6 py-4">
-                                                            <span className={`text-sm font-bold px-4 py-1 rounded-full ${inst.status === 'Pago' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                                                                {inst.status}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-right font-bold text-[#002B49]">
-                                                            {formatCurrency(inst.valor)}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                ) : (
-                                    <EmptyState
-                                        icon={<DollarSign className="text-emerald-500" size={20} />}
-                                        iconBg="bg-emerald-50"
-                                        title="Nenhum registro encontrado"
-                                        subtitle="Os dividendos serão exibidos quando houver pagamentos registrados."
-                                    />
-                                )}
-                            </SectionCard>
 
                             {/* Commissions - Only for admin/consultant */}
                             {canManageComprovantes && (
@@ -1074,6 +1036,14 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                     />
                 )}
             </AnimatePresence>
+
+            {/* KYC Document Modal */}
+            {showKYCModal && (
+                <KYCDocumentModal
+                    data={clientData || userProfile}
+                    onClose={() => setShowKYCModal(false)}
+                />
+            )}
         </>
     );
 };

@@ -13,6 +13,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import ContractDetailModal from '../shared/ContractDetailModal';
 
+
 const ClientDashboard: React.FC = () => {
   const [showValues, setShowValues] = useState(false);
   const [contracts, setContracts] = useState<any[]>([]);
@@ -21,6 +22,7 @@ const ClientDashboard: React.FC = () => {
   const [totalEquity, setTotalEquity] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [selectedContract, setSelectedContract] = useState<any>(null);
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -116,9 +118,7 @@ const ClientDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  const handleContractClick = (contract: any) => {
-    setSelectedContract(contract);
-  };
+
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -126,12 +126,12 @@ const ClientDashboard: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-10 pb-20">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-3xl font-medium text-[#002B49]">
+          <h1 className="text-xl sm:text-3xl font-medium text-[#002B49]">
             Bem-vindo(a) de volta, <span className="font-bold text-[#00A3B1]">{userName || 'Carregando...'}</span>
           </h1>
-          <p className="text-slate-400 text-sm font-medium">Visualize seus contratos vigentes com elegância e simplicidade.</p>
+          <p className="text-slate-400 text-xs sm:text-sm font-medium">Visualize seus contratos vigentes com elegância e simplicidade.</p>
         </div>
 
         <div className="flex items-center gap-4">
@@ -140,7 +140,7 @@ const ClientDashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setShowValues(!showValues)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-[#002B49] hover:bg-slate-50 transition-all shadow-sm active:scale-95"
+            className="flex items-center gap-2 px-4 sm:px-6 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-bold text-[#002B49] hover:bg-slate-50 transition-all shadow-sm active:scale-95"
           >
             {showValues ? <EyeOff size={18} className="text-slate-400" /> : <Eye size={18} className="text-[#00A3B1]" />}
             {showValues ? 'Esconder' : 'Mostrar'}
@@ -153,7 +153,7 @@ const ClientDashboard: React.FC = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="bg-gradient-to-br from-[#002B49] to-[#00A3B1] rounded-[2rem] p-8 text-white relative overflow-hidden shadow-xl shadow-[#002B49]/10"
+        className="bg-gradient-to-br from-[#002B49] to-[#00A3B1] rounded-2xl sm:rounded-[2rem] p-5 sm:p-8 text-white relative overflow-hidden shadow-xl shadow-[#002B49]/10"
       >
         <div className="relative z-10 space-y-6">
           <p className="text-white/90 font-bold text-xs uppercase tracking-wider">Resumo das participações</p>
@@ -166,7 +166,7 @@ const ClientDashboard: React.FC = () => {
               <p className="text-[10px] text-white/60 font-medium">Valor consolidado • {contracts.length} contrato{contracts.length !== 1 ? 's' : ''} vigente{contracts.length !== 1 ? 's' : ''}</p>
             </div>
           </div>
-          <div className={`text-4xl font-black tracking-tight transition-all duration-300 ${!showValues ? 'blur-md opacity-80 select-none' : 'blur-0 opacity-100'}`}>
+          <div className={`text-2xl sm:text-4xl font-black tracking-tight transition-all duration-300 ${!showValues ? 'blur-md opacity-80 select-none' : 'blur-0 opacity-100'}`}>
             {formatCurrency(totalEquity)}
           </div>
         </div>
@@ -214,7 +214,7 @@ const ClientDashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 * index, duration: 0.4 }}
                 whileHover={{ y: -5, boxShadow: '0 12px 40px -8px rgba(0, 43, 73, 0.12)' }}
-                onClick={() => handleContractClick(contract)}
+                onClick={() => setSelectedContract(contract)}
                 className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden group transition-all cursor-pointer"
               >
                 {/* Card Header */}
@@ -318,6 +318,7 @@ const ClientDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
 
       {/* Contract Details Modal */}
       {selectedContract && (

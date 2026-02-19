@@ -8,6 +8,7 @@ import RenewalConfirmModal from '../../shared/modals/RenewalConfirmModal';
 import RenewalViewModal from '../../shared/modals/RenewalViewModal';
 import RedeemRequestModal from '../../shared/modals/RedeemRequestModal';
 import RedeemViewModal from '../../shared/modals/RedeemViewModal';
+import KYCDocumentModal from '../../shared/KYCDocumentModal';
 
 export type ContractModalRole = 'client' | 'consultant' | 'admin';
 
@@ -129,6 +130,7 @@ const ConsultantContractDetailModal: React.FC<ContractDetailModalProps> = ({ con
     const [existingRedeem, setExistingRedeem] = useState<any>(null);
     const [showRedeemModal, setShowRedeemModal] = useState(false);
     const [showRedeemView, setShowRedeemView] = useState(false);
+    const [showKYCModal, setShowKYCModal] = useState(false);
 
     const isClient = role === 'client';
     const isAdmin = role === 'admin';
@@ -582,7 +584,9 @@ const ConsultantContractDetailModal: React.FC<ContractDetailModalProps> = ({ con
                                         className="flex items-center gap-2 text-[#00A3B1] text-sm font-bold hover:opacity-80 transition-opacity disabled:opacity-50"
                                     >
                                         {viewingPdf ? (
-                                            <><Loader2 size={18} className="animate-spin" /> Gerando...</>
+                                            <><Loader2 size={18} className="animate-spin" /> Carregando...</>
+                                        ) : contract.clicksign_envelope_id && contract.data_assinatura ? (
+                                            <><CheckCircle2 size={18} className="text-green-500" /> Ver Assinado</>
                                         ) : (
                                             <><Eye size={20} /> Visualizar</>
                                         )}
@@ -725,6 +729,7 @@ const ConsultantContractDetailModal: React.FC<ContractDetailModalProps> = ({ con
                                             <InfoField label="Email">
                                                 <span className="text-xs">{clientData?.email || userProfile?.email || '-'}</span>
                                             </InfoField>
+
                                         </div>
                                     )}
                                 </SectionCard>
@@ -1074,6 +1079,14 @@ const ConsultantContractDetailModal: React.FC<ContractDetailModalProps> = ({ con
                     />
                 )}
             </AnimatePresence>
+
+            {/* KYC Document Modal */}
+            {showKYCModal && (
+                <KYCDocumentModal
+                    data={clientData || userProfile}
+                    onClose={() => setShowKYCModal(false)}
+                />
+            )}
         </>
     );
 };

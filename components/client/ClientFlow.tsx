@@ -65,7 +65,7 @@ const ClientFlow: React.FC<ClientFlowProps> = ({ onLogout, userProfile }) => {
             case 'calendar': return <CalendarView role="client" userId={userProfile?.id} />;
             case 'notifications': return <NotificationsView />;
             case 'documents': return <DocumentsView userProfile={userProfile} />;
-            case 'profile': return <ProfileView />;
+            case 'profile': return <ProfileView readOnly={true} />;
             default:
                 return (
                     <div className="flex items-center justify-center h-full text-slate-400 italic">

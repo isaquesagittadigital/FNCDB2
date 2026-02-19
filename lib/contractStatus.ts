@@ -3,15 +3,17 @@
  * 
  * Possible values:
  * - Rascunho: Draft, contract not yet signed
+ * - Assinando: Contract sent for signing by involved parties
  * - Assinado: Signed by the client, awaiting processing
  * - Em processo: Being processed/approved by admin
  * - Vigente: Active and running
  * - Encerrado: Completed/closed
  */
-export type ContractStatus = 'Rascunho' | 'Assinado' | 'Em processo' | 'Vigente' | 'Encerrado';
+export type ContractStatus = 'Rascunho' | 'Assinando' | 'Assinado' | 'Em processo' | 'Vigente' | 'Encerrado';
 
 export const CONTRACT_STATUSES: ContractStatus[] = [
     'Rascunho',
+    'Assinando',
     'Assinado',
     'Em processo',
     'Vigente',
@@ -34,6 +36,13 @@ export const CONTRACT_STATUS_CONFIG: Record<ContractStatus, {
         textColor: 'text-slate-600',
         borderColor: 'border-slate-200',
         dotColor: 'bg-slate-400',
+    },
+    'Assinando': {
+        label: 'Assinando',
+        bgColor: 'bg-violet-50',
+        textColor: 'text-violet-600',
+        borderColor: 'border-violet-100',
+        dotColor: 'bg-violet-500',
     },
     'Assinado': {
         label: 'Assinado',

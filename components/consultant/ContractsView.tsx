@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ContractModal from '../shared/modals/ContractModal';
-import ConsultantContractDetailModal from './modals/ConsultantContractDetailModal';
+
 
 
 import ContractStatusBadge from '../shared/ui/ContractStatusBadge';
@@ -42,7 +42,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
   const [showClicksignModal, setShowClicksignModal] = useState(false);
   const [clicksignLoading, setClicksignLoading] = useState(false);
   const [lastCreatedContractId, setLastCreatedContractId] = useState<string | null>(null);
-  const [selectedContract, setSelectedContract] = useState<any>(null);
+
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; code: string } | null>(null);
 
   // Data States
@@ -635,7 +635,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                     {loading ? (
                       <tr><td colSpan={8} className="p-8 text-center text-slate-400">Carregando...</td></tr>
                     ) : filteredContracts.map((c, i) => (
-                      <tr key={i} onClick={() => setSelectedContract(c.fullData)} className="text-sm hover:bg-slate-50 transition-colors group cursor-pointer">
+                      <tr key={i} className="text-sm hover:bg-slate-50 transition-colors group">
                         <td className="px-6 py-5 font-bold text-[#002B49]">{c.id}</td>
                         <td className="px-6 py-5 text-slate-600">{c.fullData?.usuarios?.nome_completo || '-'}</td>
                         <td className="px-6 py-5"><ContractStatusBadge status={c.status} /></td>
@@ -1020,14 +1020,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
 
 
 
-      {/* Contract Detail Modal (Consultant Version) */}
-      {selectedContract && (
-        <ConsultantContractDetailModal
-          contract={selectedContract}
-          onClose={() => setSelectedContract(null)}
-          role="consultant"
-        />
-      )}
+
     </div>
   );
 };

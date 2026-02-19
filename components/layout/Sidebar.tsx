@@ -29,6 +29,8 @@ interface SidebarProps {
     isOpen: boolean;
     onToggle: () => void;
     theme?: 'light' | 'dark';
+    isMobile?: boolean;
+    onMobileClose?: () => void;
 }
 
 const NavItem: React.FC<{
@@ -145,7 +147,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     onLogout,
     isOpen,
     onToggle,
-    theme = 'dark' // Default to dark for backward compatibility
+    theme = 'dark',
+    isMobile = false,
+    onMobileClose
 }) => {
     const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
     const { hasPermission } = usePermissions();
@@ -176,17 +180,27 @@ const Sidebar: React.FC<SidebarProps> = ({
         : 'bg-white p-2 border border-slate-200 shadow-sm'; // Kept original style for dark mode (white card on dark bg)
 
     return (
-        <aside className={`${asideClasses} transition-all duration-300 flex flex-col relative z-30 ${isOpen ? 'w-64' : 'w-20'}`}>
+        <aside className={`${asideClasses} transition-all duration-300 flex flex-col relative z-30 ${isMobile ? 'w-full h-full' : (isOpen ? 'w-64' : 'w-20')}`}>
             <div className={`h-20 px-6 flex items-center ${isOpen ? 'justify-start' : 'justify-center'}`}>
                 {logo}
+                {isMobile && (
+                    <button
+                        onClick={onMobileClose}
+                        className="ml-auto text-white/60 hover:text-white transition-colors"
+                    >
+                        <ChevronLeft size={22} />
+                    </button>
+                )}
             </div>
 
-            <button
-                onClick={onToggle}
-                className={`absolute -right-3 top-7 z-50 w-7 h-7 rounded-full flex items-center justify-center text-white shadow-lg transition-all transform ${!isOpen && 'rotate-180'} ${toggleButtonClasses}`}
-            >
-                <ChevronLeft size={16} strokeWidth={3} />
-            </button>
+            {!isMobile && (
+                <button
+                    onClick={onToggle}
+                    className={`absolute -right-3 top-7 z-50 w-7 h-7 rounded-full flex items-center justify-center text-white shadow-lg transition-all transform ${!isOpen && 'rotate-180'} ${toggleButtonClasses}`}
+                >
+                    <ChevronLeft size={16} strokeWidth={3} />
+                </button>
+            )}
 
             <nav className="flex-1 px-4 mt-6 space-y-1 overflow-y-auto no-scrollbar">
                 {items.filter(canShow).map(item => {

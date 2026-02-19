@@ -8,7 +8,11 @@ import AddressTab from './profile/AddressTab';
 import BankDataTab from './profile/BankDataTab';
 import { Loader2 } from 'lucide-react';
 
-const ProfileView: React.FC = () => {
+interface ProfileViewProps {
+  readOnly?: boolean;
+}
+
+const ProfileView: React.FC<ProfileViewProps> = ({ readOnly = false }) => {
   const [activeTab, setActiveTab] = useState('access');
   const [userProfile, setUserProfile] = useState<any>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -108,9 +112,9 @@ const ProfileView: React.FC = () => {
   return (
     <div className="p-4 max-w-full mx-auto">
       <header className="mb-8">
-        <h1 className="text-2xl font-bold text-[#002B49] mb-6">Meus dados</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-[#002B49] mb-6">Meus dados</h1>
 
-        <div className="flex gap-8 border-b border-slate-200">
+        <div className="flex gap-4 sm:gap-8 border-b border-slate-200 overflow-x-auto no-scrollbar">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -130,7 +134,7 @@ const ProfileView: React.FC = () => {
         </div>
       </header>
 
-      <main className="bg-white rounded-[2rem] p-10 shadow-sm border border-slate-100 min-h-[600px] flex flex-col">
+      <main className="bg-white rounded-2xl sm:rounded-[2rem] p-4 sm:p-10 shadow-sm border border-slate-100 min-h-[400px] sm:min-h-[600px] flex flex-col">
         {loading ? (
           <div className="flex-1 flex justify-center items-center">
             <Loader2 className="animate-spin text-[#00A3B1]" size={32} />
@@ -149,6 +153,7 @@ const ProfileView: React.FC = () => {
                 userProfile={userProfile}
                 onUpdate={handleUpdateProfile}
                 saving={saving}
+                readOnly={readOnly}
               />
             )}
             {activeTab === 'address' && (
@@ -156,6 +161,7 @@ const ProfileView: React.FC = () => {
                 userProfile={userProfile}
                 onUpdate={handleUpdateProfile}
                 saving={saving}
+                readOnly={readOnly}
               />
             )}
             {activeTab === 'bank' && (
@@ -163,6 +169,7 @@ const ProfileView: React.FC = () => {
                 userProfile={userProfile}
                 accounts={accounts}
                 refreshAccounts={fetchAccounts}
+                readOnly={readOnly}
               />
             )}
           </>

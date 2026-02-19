@@ -26,7 +26,6 @@ server.register(multipart, {
 });
 
 // Routes
-// Routes
 import { authRoutes } from './routes/auth.routes';
 import { adminRoutes } from './routes/admin.routes';
 import { webhookRoutes } from './routes/webhook.routes';

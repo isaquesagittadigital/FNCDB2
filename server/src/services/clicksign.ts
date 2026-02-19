@@ -161,7 +161,7 @@ export async function addSigner(
         birthday = '1990-01-01';
     }
 
-    // Format phone number for Clicksign: +55XXXXXXXXXXX (exactly 13 chars)
+    // Format phone number for Clicksign: 55XXXXXXXXXXX (no +)
     let phoneNumber: string | undefined;
     if (opts.phone) {
         // Strip everything except digits, remove leading country code 55
@@ -171,7 +171,7 @@ export async function addSigner(
         }
         // Must be 10 or 11 digits (DDD + number)
         if (digits.length === 10 || digits.length === 11) {
-            phoneNumber = `+55${digits}`;
+            phoneNumber = `55${digits}`;
         } else {
             console.warn(`[Clicksign] Phone '${opts.phone}' has ${digits.length} digits, expected 10-11. Skipping phone.`);
         }
@@ -322,6 +322,36 @@ export async function notifyEnvelopeSigners(envelopeId: string, message?: string
 export async function getEnvelopeDetails(envelopeId: string) {
     const result = await clicksignRequest('GET', `/envelopes/${envelopeId}`);
     return result;
+}
+
+// ─── 7b. Get Envelope Documents ──────────────────────────────────────────────
+export async function getEnvelopeDocuments(envelopeId: string) {
+    const result = await clicksignRequest('GET', `/envelopes/${envelopeId}/documents`);
+    return result;
+}
+
+// ─── 7c. Download Signed Document (returns PDF buffer) ───────────────────────
+export async function downloadSignedDocument(envelopeId: string, documentId: string): Promise<Buffer> {
+    const url = `${CLICKSIGN_BASE_URL}/envelopes/${envelopeId}/documents/${documentId}/download`;
+    console.log(`[Clicksign] Downloading signed document: ${url}`);
+
+    const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': process.env.CLICKSIGN_TOKEN || '',
+            'Accept': 'application/pdf'
+        }
+    });
+
+    if (!res.ok) {
+        const text = await res.text();
+        console.error(`[Clicksign] Download error ${res.status}:`, text);
+        throw new Error(`Clicksign download error ${res.status}: ${text}`);
+    }
+
+    const arrayBuffer = await res.arrayBuffer();
+    console.log(`[Clicksign] Document downloaded: ${arrayBuffer.byteLength} bytes`);
+    return Buffer.from(arrayBuffer);
 }
 
 // ─── 8. Webhook Management ───────────────────────────────────────────────────

@@ -54,7 +54,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
 
       const res = await fetch(`${apiUrl}/admin/calendar-payments?${params.toString()}`);
       if (res.ok) {
-        const data = await res.json();
+        let data = await res.json();
+        // For client role, only show their dividends (hide commissions)
+        if (role === 'client') {
+          data = data.filter((p: CalendarPayment) => p.dividendos_clientes === true);
+        }
         setPayments(data);
       } else {
         console.error('Failed to fetch calendar payments');
@@ -199,6 +203,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
   const totalMonth = payments.reduce((sum, p) => sum + (p.valor || 0), 0);
   const dividendosCount = payments.filter(p => p.dividendos_clientes).length;
   const comissoesCount = payments.filter(p => p.comissao_consultor || p.comissao_consultor_lider).length;
+  const isClient = role === 'client';
 
   return (
     <div className="max-w-full space-y-6">
@@ -211,9 +216,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
 
       {/* Header Controls */}
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-[#002B49]">Calendário</h2>
+        <h2 className="text-lg sm:text-xl font-bold text-[#002B49]">Calendário</h2>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <button
               onClick={goToToday}
@@ -235,14 +240,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
                 <ChevronRight size={16} />
               </button>
             </div>
-          </div>
-
-          <div className="text-lg text-[#002B49] font-medium">
-            {monthNames[currentMonth]} de {currentYear}
+            <div className="text-sm sm:text-lg text-[#002B49] font-medium capitalize">
+              {monthNames[currentMonth]} de {currentYear}
+            </div>
           </div>
 
           {/* Summary badges */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             {loading ? (
               <span className="text-xs text-slate-400 animate-pulse">Carregando...</span>
             ) : (
@@ -250,9 +254,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
                 <span className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-medium border border-emerald-200">
                   {dividendosCount} dividendos
                 </span>
-                <span className="text-xs bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium border border-blue-200">
-                  {comissoesCount} comissões
-                </span>
+                {!isClient && (
+                  <span className="text-xs bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-medium border border-blue-200">
+                    {comissoesCount} comissões
+                  </span>
+                )}
                 <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1 rounded-full font-semibold border border-slate-200">
                   Total: {formatCurrency(totalMonth)}
                 </span>
@@ -285,7 +291,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
               <div
                 key={idx}
                 onClick={() => cell.currentMonth && setSelectedDay(cell.day === selectedDay ? null : cell.day)}
-                className={`min-h-[110px] p-1.5 border-b border-r last:border-r-0 border-slate-100 group transition-colors cursor-pointer ${isSelected ? 'bg-blue-50 ring-2 ring-blue-300 ring-inset' :
+                className={`min-h-[60px] sm:min-h-[110px] p-1 sm:p-1.5 border-b border-r last:border-r-0 border-slate-100 group transition-colors cursor-pointer ${isSelected ? 'bg-blue-50 ring-2 ring-blue-300 ring-inset' :
                   isTodayCell ? 'bg-amber-50' :
                     hasPayments ? 'bg-slate-50/60' :
                       'bg-white hover:bg-slate-50'
@@ -301,7 +307,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
                   ) : cell.day}
                 </div>
                 {/* Payment tags */}
-                {dayPayments.slice(0, 4).map((p, i) => {
+                {dayPayments.slice(0, 2).map((p, i) => {
                   const colors = getPaymentColor(p);
                   return (
                     <div
@@ -314,9 +320,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
                     </div>
                   );
                 })}
-                {dayPayments.length > 4 && (
+                {dayPayments.length > 2 && (
                   <div className="text-[9px] text-slate-400 font-medium px-1">
-                    +{dayPayments.length - 4} mais
+                    +{dayPayments.length - 2} mais
                   </div>
                 )}
               </div>
@@ -368,19 +374,23 @@ const CalendarView: React.FC<CalendarViewProps> = ({ role = 'admin', userId }) =
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-6 text-xs text-slate-500">
+      <div className="flex items-center gap-4 sm:gap-6 text-xs text-slate-500 flex-wrap">
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded bg-emerald-200 border border-emerald-300" />
           <span>Dividendos Cliente</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-blue-200 border border-blue-300" />
-          <span>Comissão Consultor</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-purple-200 border border-purple-300" />
-          <span>Comissão Líder</span>
-        </div>
+        {!isClient && (
+          <>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-blue-200 border border-blue-300" />
+              <span>Comissão Consultor</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-purple-200 border border-purple-300" />
+              <span>Comissão Líder</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Payment Detail Modal */}

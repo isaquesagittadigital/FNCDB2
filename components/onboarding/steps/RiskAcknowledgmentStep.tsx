@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { ArrowLeft, Check, ChevronDown } from 'lucide-react';
 
 interface RiskAcknowledgmentStepProps {
@@ -9,6 +9,16 @@ interface RiskAcknowledgmentStepProps {
 }
 
 const RiskAcknowledgmentStep: React.FC<RiskAcknowledgmentStepProps> = ({ onNext, onBack, data, onUpdate }) => {
+    const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    const handleScroll = useCallback(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) {
+            setHasScrolledToBottom(true);
+        }
+    }, []);
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -26,7 +36,7 @@ const RiskAcknowledgmentStep: React.FC<RiskAcknowledgmentStepProps> = ({ onNext,
 
             {/* Scrollable Risk Content */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-6 max-h-[320px] overflow-y-auto relative scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent pr-2">
+                <div ref={scrollRef} onScroll={handleScroll} className="p-6 max-h-[320px] overflow-y-auto relative scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent pr-2">
 
                     <div className="space-y-6 pb-12">
                         <div>
@@ -109,12 +119,14 @@ const RiskAcknowledgmentStep: React.FC<RiskAcknowledgmentStepProps> = ({ onNext,
                         </div>
                     </div>
 
-                    {/* Fade out effect at bottom */}
-                    <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent pointer-events-none flex items-end justify-center pb-4">
-                        <span className="bg-[#E0F2FE] text-[#0284C7] text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                            Role para ler todo o conteúdo <ChevronDown size={12} />
-                        </span>
-                    </div>
+                    {/* Fade out effect at bottom - hides after scrolling to bottom */}
+                    {!hasScrolledToBottom && (
+                        <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent pointer-events-none flex items-end justify-center pb-4 transition-opacity duration-300">
+                            <span className="bg-[#E0F2FE] text-[#0284C7] text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1 shadow-sm">
+                                Role para ler todo o conteúdo <ChevronDown size={12} />
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
 
