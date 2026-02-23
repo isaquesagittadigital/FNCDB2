@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
+import { DateRange } from './AdminDashboard';
+
 interface Contract {
     id: string;
     user_id: string;
@@ -16,9 +18,10 @@ interface Contract {
 
 interface ContractsTableProps {
     onViewAllContracts?: () => void;
+    dateRange?: DateRange;
 }
 
-const ContractsTable: React.FC<ContractsTableProps> = ({ onViewAllContracts }) => {
+const ContractsTable: React.FC<ContractsTableProps> = ({ onViewAllContracts, dateRange }) => {
     const [contracts, setContracts] = useState<Contract[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -26,11 +29,16 @@ const ContractsTable: React.FC<ContractsTableProps> = ({ onViewAllContracts }) =
 
     useEffect(() => {
         fetchContracts();
-    }, []);
+    }, [dateRange]);
 
     const fetchContracts = async () => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts`);
+            setLoading(true);
+            let url = `${import.meta.env.VITE_API_URL}/admin/contracts`;
+            if (dateRange?.start && dateRange?.end) {
+                url += `?startDate=${dateRange.start}&endDate=${dateRange.end}`;
+            }
+            const response = await fetch(url);
             if (response.ok) {
                 const data = await response.json();
                 setContracts(data);

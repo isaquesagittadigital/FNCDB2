@@ -1,8 +1,13 @@
 
 import React from 'react';
 import { UserPlus, MoreHorizontal } from 'lucide-react';
+import { DateRange } from './AdminDashboard';
 
-const NewClientsTable: React.FC = () => {
+interface NewClientsTableProps {
+    dateRange?: DateRange;
+}
+
+const NewClientsTable: React.FC<NewClientsTableProps> = ({ dateRange }) => {
     const [clients, setClients] = React.useState<any[]>([]);
     const [totalClients, setTotalClients] = React.useState(0);
     const [loading, setLoading] = React.useState(true);
@@ -10,7 +15,12 @@ const NewClientsTable: React.FC = () => {
     React.useEffect(() => {
         const fetchClients = async () => {
             try {
-                const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients/recent`);
+                setLoading(true);
+                let url = `${import.meta.env.VITE_API_URL}/admin/clients/recent`;
+                if (dateRange?.start && dateRange?.end) {
+                    url += `?startDate=${dateRange.start}&endDate=${dateRange.end}`;
+                }
+                const response = await fetch(url);
                 if (response.ok) {
                     const { data, total } = await response.json();
 
@@ -34,7 +44,7 @@ const NewClientsTable: React.FC = () => {
         };
 
         fetchClients();
-    }, []);
+    }, [dateRange]);
 
     if (loading) {
         return <div className="p-6 text-center text-slate-500">Carregando clientes...</div>;

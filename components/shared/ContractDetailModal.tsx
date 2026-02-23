@@ -122,6 +122,7 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
     const [installments, setInstallments] = useState<any[]>([]);
+    const [commissions, setCommissions] = useState<any[]>([]);
     const [showRenewalModal, setShowRenewalModal] = useState(false);
     const [showRenewalSuccess, setShowRenewalSuccess] = useState(false);
     const [showRenewalView, setShowRenewalView] = useState(false);
@@ -273,6 +274,23 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
             });
 
             setInstallments(mapped);
+
+            // Filter only consultant commissions (comissao_consultores === true)
+            const consultantCommissions = data.filter((p: any) => p.comissao_consultores === true);
+
+            // Map to commission format for rendering
+            const mappedCommissions = consultantCommissions.map((p: any, idx: number) => {
+                const dateStr = p.data ? new Date(p.data).toLocaleDateString('pt-BR') : '-';
+                return {
+                    parcela: idx + 1,
+                    data: dateStr,
+                    status: p.pago ? 'Pago' : 'Pendente',
+                    valor: p.valor || 0,
+                    evento: p.evento || '',
+                };
+            });
+
+            setCommissions(mappedCommissions);
         } catch (err) {
             console.error('Error fetching dividends:', err);
         }
@@ -909,8 +927,8 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
 
 
 
-                            {/* Dividends - Only visible for Vigente contracts */}
-                            {(contract.status === 'Vigente' || installments.length > 0) && (
+                            {/* Dividends - Only visible for Vigente contracts or if there are installments */}
+                            {(contractStatus === 'Vigente' || installments.length > 0) && (
                                 <SectionCard title="Dividendos do cliente" icon={<DollarSign size={15} />}>
                                     {installments.length > 0 ? (
                                         <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm overflow-x-auto">
@@ -919,7 +937,7 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                                     <tr className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
                                                         <th className="px-6 py-4">Parcela</th>
                                                         <th className="px-6 py-4">Data de vencimento</th>
-                                                        <th className="px-6 py-4">Status</th>
+                                                        <th className="px-6 py-4 text-center">Status</th>
                                                         <th className="px-6 py-4 text-right">Valor dividendo</th>
                                                     </tr>
                                                 </thead>
@@ -929,9 +947,9 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                                             <td className="px-6 py-4 font-medium text-slate-600">
                                                                 {inst.isAporte ? 'Aporte' : inst.isPrincipalReturn ? 'Resgate Principal' : inst.evento || inst.parcela}
                                                             </td>
-                                                            <td className="px-6 py-4 text-slate-500">{inst.data}</td>
-                                                            <td className="px-6 py-4">
-                                                                <span className={`text-sm font-bold px-4 py-1 rounded-full ${inst.status === 'Pago' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                                            <td className="px-6 py-4 text-slate-500 font-medium">{inst.data}</td>
+                                                            <td className="px-6 py-4 text-center">
+                                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold ${inst.status === 'Pago' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
                                                                     {inst.status}
                                                                 </span>
                                                             </td>
@@ -957,12 +975,45 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                             {/* Commissions - Only for admin/consultant */}
                             {canManageComprovantes && (
                                 <SectionCard title="Comissões do consultor" icon={<TrendingUp size={15} />}>
-                                    <EmptyState
-                                        icon={<TrendingUp className="text-[#00A3B1]" size={20} />}
-                                        iconBg="bg-[#E6F6F7]"
-                                        title="Nenhum registro encontrado"
-                                        subtitle="As comissões serão registradas conforme os processos forem concluídos."
-                                    />
+                                    {commissions.length > 0 ? (
+                                        <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm overflow-x-auto">
+                                            <table className="w-full text-left min-w-[600px]">
+                                                <thead className="bg-[#F8FAFB] border-b border-slate-100">
+                                                    <tr className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                                                        <th className="px-6 py-4">Parcela</th>
+                                                        <th className="px-6 py-4">Data de vencimento</th>
+                                                        <th className="px-6 py-4 text-center">Status</th>
+                                                        <th className="px-6 py-4 text-right">Valor comissão</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-50">
+                                                    {commissions.map((comm, idx) => (
+                                                        <tr key={idx} className="hover:bg-slate-50 text-sm">
+                                                            <td className="px-6 py-4 font-medium text-slate-600">
+                                                                {comm.parcela}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-slate-500 font-medium">{comm.data}</td>
+                                                            <td className="px-6 py-4 text-center">
+                                                                <span className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold ${comm.status === 'Pago' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
+                                                                    {comm.status}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right font-bold text-[#002B49]">
+                                                                {formatCurrency(comm.valor)}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <EmptyState
+                                            icon={<TrendingUp className="text-[#00A3B1]" size={20} />}
+                                            iconBg="bg-[#E6F6F7]"
+                                            title="Nenhum registro encontrado"
+                                            subtitle="As comissões serão registradas conforme os processos forem concluídos."
+                                        />
+                                    )}
                                 </SectionCard>
                             )}
                         </div>

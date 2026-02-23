@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, ArrowLeft, Calendar, FileText, User, DollarSign, BarChart, Mail, MessageCircle, MessageSquare, Check, X, ChevronRight, Package, AlertCircle, Home } from 'lucide-react';
+import { Save, ArrowLeft, Calendar, FileText, User, DollarSign, BarChart, Mail, MessageCircle, MessageSquare, Check, X, ChevronRight, Package, AlertCircle, Home, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import FeedbackModal, { FeedbackModalData } from '../../shared/ui/FeedbackModal';
 import { calculateContractProjection } from '../../../lib/financialUtils';
 
 interface ContractFormProps {
@@ -22,6 +22,7 @@ const ContractForm: React.FC<ContractFormProps> = ({ contractId, onBack, onSave,
     const [consultants, setConsultants] = useState<any[]>([]); // To hold list of consultants for admin
     const [consultorSearch, setConsultorSearch] = useState('');
     const [showConsultorDropdown, setShowConsultorDropdown] = useState(false);
+    const [feedback, setFeedback] = useState<FeedbackModalData | null>(null);
 
     const [formData, setFormData] = useState({
         user_id: '',
@@ -320,8 +321,7 @@ const ContractForm: React.FC<ContractFormProps> = ({ contractId, onBack, onSave,
                                 onClick={() => setSignaturePreference(item.id as any)}
                                 className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${signaturePreference === item.id
                                     ? 'bg-white border text-[#002B49] border-slate-200 shadow-sm'
-                                    : 'text-slate-500 hover:text-[#002B49]'
-                                    }`}
+                                    : 'text-slate-500 hover:text-[#002B49]'}`}
                             >
                                 <item.icon size={16} className={item.color && signaturePreference !== item.id ? item.color : (signaturePreference === item.id ? 'text-[#002B49]' : 'text-slate-400')} />
                                 {item.label}
@@ -447,13 +447,25 @@ const ContractForm: React.FC<ContractFormProps> = ({ contractId, onBack, onSave,
                             <select
                                 name="titulo"
                                 value={formData.titulo}
-                                onChange={(e) => setFormData(prev => ({ ...prev, titulo: e.target.value }))}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    if (value.includes('(Em Breve)')) {
+                                        setFeedback({
+                                            type: 'warning',
+                                            title: 'Produto em breve',
+                                            message: 'Este produto ainda não está disponível para contratação. Selecione outra opção.'
+                                        });
+                                        setFormData(prev => ({ ...prev, titulo: '0001 - Câmbio' }));
+                                        return;
+                                    }
+                                    setFormData(prev => ({ ...prev, titulo: value }));
+                                }}
                                 className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/20 focus:border-[#00A3B1] text-slate-500 transition-all cursor-pointer appearance-none"
                                 required
                             >
                                 <option value="0001 - Câmbio">0001 - Câmbio</option>
-                                <option value="0002 - Crédito Privado">0002 - Crédito Privado</option>
-                                <option value="0003 - Fundo Exclusivo">0003 - Fundo Exclusivo</option>
+                                <option value="0002 - Recebíveis (Em Breve)">0002 - Recebíveis (Em Breve)</option>
+                                <option value="0003 - Consignado (Em Breve)">0003 - Consignado (Em Breve)</option>
                             </select>
                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                                 <ChevronRight className="rotate-90" size={18} />
@@ -704,6 +716,11 @@ const ContractForm: React.FC<ContractFormProps> = ({ contractId, onBack, onSave,
                     </button>
                 </div>
             </form>
+
+            <FeedbackModal
+                data={feedback}
+                onClose={() => setFeedback(null)}
+            />
         </div>
     );
 };

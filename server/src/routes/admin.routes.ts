@@ -194,9 +194,11 @@ export async function adminRoutes(server: FastifyInstance) {
     });
 
     // Recent Clients (Keep existing)
-    server.get('/clients/recent', async (_request, reply) => {
+    server.get('/clients/recent', async (request: any, reply) => {
         try {
-            const { data, count, error } = await supabase
+            const { startDate, endDate } = request.query;
+
+            let query = supabase
                 .from('usuarios')
                 .select(`
                     id,
@@ -214,7 +216,13 @@ export async function adminRoutes(server: FastifyInstance) {
                         )
                     )
                 `, { count: 'exact' })
-                .eq('tipo_user', 'Cliente')
+                .eq('tipo_user', 'Cliente');
+
+            if (startDate && endDate) {
+                query = query.gte('created_at', startDate).lte('created_at', endDate + 'T23:59:59');
+            }
+
+            const { data, count, error } = await query
                 .order('created_at', { ascending: false })
                 .limit(10);
 
@@ -543,11 +551,12 @@ export async function adminRoutes(server: FastifyInstance) {
                         body.nome_fantasia,
                         linkData.properties.action_link
                     );
-                } catch (emailErr) {
-                    console.error('Email sending failed:', emailErr);
-                    // Don't fail the whole user creation if just email fails, but maybe return a partial success?
+                } catch (notiErr) {
+                    console.error('[Approval Finalize] Error sending notifications:', notiErr);
+                    // Don't fail the whole process if notifications fail, but log it
                 }
             }
+            // Don't fail the whole user creation if just email fails, but maybe return a partial success?
 
             return reply.send(profile);
         } catch (err: any) {
@@ -558,14 +567,22 @@ export async function adminRoutes(server: FastifyInstance) {
 
 
     // Global Contracts Management
-    server.get('/contracts', async (_request: any, reply) => {
+    server.get('/contracts', async (request: any, reply) => {
         try {
+            const { startDate, endDate } = request.query;
+
             // Direct REST API call to bypass supabase-js PostgREST schema cache issue
             const supabaseUrl = process.env.SUPABASE_URL;
             const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+            let url = `${supabaseUrl}/rest/v1/contratos?select=id,user_id,codigo,titulo,status,valor_aporte,taxa_mensal,periodo_meses,data_inicio,dia_pagamento,consultor_id,created_at,preferencia_assinatura,taxa_consultor,taxa_lider,lider_id,data_assinatura,arquivo_url,segundo_pagamento,status_contrato_id&order=created_at.desc`;
+
+            if (startDate && endDate) {
+                url += `&created_at=gte.${startDate}&created_at=lte.${endDate}T23:59:59`;
+            }
+
             const contractsRes = await fetch(
-                `${supabaseUrl}/rest/v1/contratos?select=id,user_id,codigo,titulo,status,valor_aporte,taxa_mensal,periodo_meses,data_inicio,dia_pagamento,consultor_id,created_at,preferencia_assinatura,taxa_consultor,taxa_lider,lider_id,data_assinatura,arquivo_url,segundo_pagamento,status_contrato_id&order=created_at.desc`,
+                url,
                 {
                     headers: {
                         'apikey': serviceKey!,
@@ -1800,7 +1817,7 @@ export async function adminRoutes(server: FastifyInstance) {
                 ]
             });
         } catch (err: any) {
-            console.error('[Approval Process Detail] Error:', err);
+            console.error('[Approval Process Detail] Error:', err); AtualzDev
             return reply.status(500).send({ error: err.message });
         }
     });
@@ -1841,6 +1858,24 @@ export async function adminRoutes(server: FastifyInstance) {
 
             if (error) throw error;
 
+            // Notify consultant if step is rejected
+            if (status === 'rejected' && data?.consultor_id) {
+                const stepNames: Record<string, string> = {
+                    comprovante: 'Comprovante',
+                    perfil: 'Perfil do investidor',
+                    assinatura: 'Assinatura do contrato'
+                };
+                const stepLabel = stepNames[step] || step;
+
+                await supabase.from('notificacoes').insert({
+                    user_id: data.consultor_id,
+                    type: 'Sistema',
+                    title: 'Fluxo de aprovação parcial reprovado',
+                    content: `A etapa "${stepLabel}" do processo de integralização do contrato "${data.titulo}" foi reprovada pelo administrador. Data da reprovação: ${new Date().toLocaleDateString('pt-BR')}. Motivo: ${_reason || 'Não informado'}.`,
+                    is_read: false
+                });
+            }
+
             return reply.send({
                 success: true,
                 step,
@@ -1864,201 +1899,253 @@ export async function adminRoutes(server: FastifyInstance) {
 
         try {
             if (approved) {
+                // Fetch current contract data
+                const { data: existingContract, error: fErr } = await supabase
+                    .from('contratos')
+                    .select('*')
+                    .eq('id', contractId)
+                    .single();
+
+                if (fErr || !existingContract) {
+                    server.log.error({ fErr, contractId }, '[Approval Finalize] Contract not found');
+                    throw fErr || new Error('Contrato não encontrado');
+                }
+                server.log.info({ existingContractId: existingContract.id, keys: Object.keys(existingContract) }, '[Approval Finalize] Contract found, proceeding to activation');
+
                 // Activate the contract
-                const updateData: any = {
+                const startDt = new Date(data_ativacao || new Date().toISOString());
+                const period = parseInt(existingContract.periodo_meses) || 12;
+
+                // Recalculate data_fim
+                const endDt = new Date(startDt);
+                endDt.setMonth(endDt.getMonth() + period);
+                const data_fim = endDt.toISOString().split('T')[0];
+
+                // --- Update Contract Status (Consolidated based on test results) ---
+                const finalUpdateData = {
                     status: 'Vigente',
+                    data_inicio: startDt.toISOString().split('T')[0],
                     aprovacao_status: 'approved',
                     aprovacao_data: new Date().toISOString(),
                     aprovacao_obs: observacao || null
                 };
 
-                if (data_ativacao) {
-                    updateData.data_ativacao = data_ativacao;
-                    updateData.data_inicio = data_ativacao; // Update start date to activation date
-                }
-
-                const { data, error } = await supabase
+                const { data: updatedContract, error: uErr } = await supabase
                     .from('contratos')
-                    .update(updateData)
+                    .update(finalUpdateData)
                     .eq('id', contractId)
                     .select()
                     .single();
 
-                if (error) throw error;
-
-                // --- Generate Transactions & Commissions upon Approval ---
-                if (data) {
-                    const startDt = new Date(data.data_inicio);
-                    const isCapital = data.titulo === '0003 - Fundo Exclusivo';
-                    const rentabilidade = parseFloat(data.taxa_mensal) || 0;
-                    const amount = parseFloat(data.valor_aporte) || 0;
-                    const period = parseInt(data.periodo_meses) || 12;
-                    let consultorIdToPay = data.consultor_id;
-                    let consultorGlobalTax = 0;
-
-                    // Fetch consultant's global tax percent if there is a consultant
-                    if (consultorIdToPay) {
-                        const { data: cUser } = await supabase
-                            .from('usuarios')
-                            .select('percentual_contrato')
-                            .eq('id', consultorIdToPay)
-                            .single();
-                        if (cUser) {
-                            consultorGlobalTax = parseFloat(cUser.percentual_contrato) || 5.0; // fallback to 5.0 if not set
-                        }
-                    }
-
-                    // Consultant's share = Global Tax - Contract Tax
-                    const consultorTaxaAplicada = Math.max(0, consultorGlobalTax - rentabilidade);
-
-                    // Calculations
-                    let transactionsToInsert: any[] = [];
-                    let commissionsToInsert: any[] = [];
-
-                    if (isCapital) {
-                        // 0003 - Fundo Exclusivo: One payment at the end
-                        const endDt = new Date(startDt);
-                        endDt.setMonth(endDt.getMonth() + period);
-                        const endDtStr = endDt.toISOString().split('T')[0];
-
-                        const totalFactor = Math.pow(1 + rentabilidade / 100, period);
-                        const finalAmount = amount * totalFactor;
-
-                        transactionsToInsert.push({
-                            contrato_id: data.id,
-                            user_id: data.user_id,
-                            status: 'Pendente',
-                            tipo: 'Valor do aporte',
-                            valor: finalAmount,
-                            data_vencimento: endDtStr
-                        });
-
-                        // Commission at the end based on calculated tax
-                        if (consultorIdToPay && consultorTaxaAplicada > 0) {
-                            const commFactor = Math.pow(1 + consultorTaxaAplicada / 100, period);
-                            const commAmount = (amount * commFactor) - amount; // Total yield for the consultant part
-                            if (commAmount > 0) {
-                                commissionsToInsert.push({
-                                    contrato_id: data.id,
-                                    consultor_id: consultorIdToPay,
-                                    valor: commAmount,
-                                    data_pagamento: endDtStr,
-                                    status: 'Pendente',
-                                    tipo_valor: 'Porcentagem'
-                                });
-                            }
-                        }
-                    } else {
-                        // For 0001 - Câmbio and 0002 - Crédito Privado
-                        // Pro-rata first month
-                        let d = new Date(startDt);
-                        const firstMonthTarget = new Date(d.getFullYear(), d.getMonth() + 1, 10);
-                        let firstMonthDays = Math.max(0, Math.floor((firstMonthTarget.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)));
-
-                        let firstMonthPaymentDate = new Date(firstMonthTarget);
-                        if (firstMonthDays < 30) {
-                            firstMonthDays += 30; // Shift to next month if less than 30 days
-                            firstMonthPaymentDate.setMonth(firstMonthPaymentDate.getMonth() + 1);
-                        }
-
-                        // Daily rate calculation
-                        const dailyRate = rentabilidade / 30;
-                        const firstMonthDividend = amount * (dailyRate / 100) * firstMonthDays;
-
-                        transactionsToInsert.push({
-                            contrato_id: data.id,
-                            user_id: data.user_id,
-                            status: 'Pendente',
-                            tipo: 'Pro-rata',
-                            valor: firstMonthDividend,
-                            data_vencimento: firstMonthPaymentDate.toISOString().split('T')[0]
-                        });
-
-                        // Consultant Pro-rata commission
-                        if (consultorIdToPay && consultorTaxaAplicada > 0) {
-                            const commDailyRate = consultorTaxaAplicada / 30;
-                            const firstMonthComm = amount * (commDailyRate / 100) * firstMonthDays;
-                            if (firstMonthComm > 0) {
-                                commissionsToInsert.push({
-                                    contrato_id: data.id,
-                                    consultor_id: consultorIdToPay,
-                                    valor: firstMonthComm,
-                                    data_pagamento: firstMonthPaymentDate.toISOString().split('T')[0],
-                                    status: 'Pendente',
-                                    tipo_valor: 'Porcentagem'
-                                });
-                            }
-                        }
-
-                        // Subsequent standard months
-                        const standardDividend = amount * (rentabilidade / 100);
-                        const standardComm = consultorIdToPay && consultorTaxaAplicada > 0 ? amount * (consultorTaxaAplicada / 100) : 0;
-
-                        let currentPaymentDate = new Date(firstMonthPaymentDate);
-                        for (let i = 1; i < period; i++) {
-                            currentPaymentDate.setMonth(currentPaymentDate.getMonth() + 1);
-                            const dtStr = currentPaymentDate.toISOString().split('T')[0];
-
-                            transactionsToInsert.push({
-                                contrato_id: data.id,
-                                user_id: data.user_id,
-                                status: 'Pendente',
-                                tipo: 'Dividendo',
-                                valor: standardDividend,
-                                data_vencimento: dtStr
-                            });
-
-                            if (standardComm > 0) {
-                                commissionsToInsert.push({
-                                    contrato_id: data.id,
-                                    consultor_id: consultorIdToPay,
-                                    valor: standardComm,
-                                    data_pagamento: dtStr,
-                                    status: 'Pendente',
-                                    tipo_valor: 'Porcentagem'
-                                });
-                            }
-                        }
-
-                        // Capital return on last day
-                        const finalDtStr = currentPaymentDate.toISOString().split('T')[0];
-                        transactionsToInsert.push({
-                            contrato_id: data.id,
-                            user_id: data.user_id,
-                            status: 'Pendente',
-                            tipo: 'Valor do aporte',
-                            valor: amount,
-                            data_vencimento: finalDtStr
-                        });
-                    }
-
-                    // Insert to DB
-                    if (transactionsToInsert.length > 0) {
-                        const { error: tErr } = await supabase.from('transacoes').insert(transactionsToInsert);
-                        if (tErr) console.error('[Finalize] Error inserting transacoes', tErr);
-                    }
-                    if (commissionsToInsert.length > 0) {
-                        const { error: cErr } = await supabase.from('comissoes').insert(commissionsToInsert);
-                        if (cErr) console.error('[Finalize] Error inserting comissoes', cErr);
-                    }
+                if (uErr) {
+                    server.log.error({ uErr, finalUpdateData }, '[Approval Finalize] Final contract update failed');
+                    throw uErr;
                 }
-                // --- End Generate Logic ---
 
-                // Send notification to client
-                if (data?.user_id) {
-                    await supabase.from('notificacoes').insert({
-                        user_id: data.user_id,
-                        type: 'Sistema',
-                        title: 'Contrato Ativado',
-                        content: `Seu contrato "${data.titulo}" foi aprovado e ativado com sucesso.`,
-                        is_read: false
+                server.log.info({ updatedContractId: updatedContract.id }, '[Approval Finalize] Contract activated successfully');
+
+                // --- Generate Transactions & Commissions ---
+                if (updatedContract) {
+                    const amount = parseFloat(updatedContract.valor_aporte) || 0;
+                    const rentabilidade = parseFloat(updatedContract.taxa_mensal) || 1.6;
+                    const consultorId = updatedContract.consultor_id;
+                    const liderId = updatedContract.lider_id;
+
+                    let calendarRecords: any[] = [];
+
+                    // 1. Leader Share: 0.10% fixed
+                    if (liderId) {
+                        calendarRecords.push({
+                            contrato_id: updatedContract.id,
+                            cliente_id: updatedContract.user_id,
+                            consultor_id: liderId,
+                            valor: amount * 0.0010,
+                            data: startDt.toISOString().split('T')[0],
+                            evento: 'Participação de Líder (0.10%)',
+                            dividendos_clientes: false,
+                            comissao_consultor: false,
+                            comissao_consultor_lider: true,
+                            pago: false
+                        });
+                    }
+
+                    // 2. Client & Consultant Schedule
+                    let currentRefDate = new Date(startDt);
+
+                    // First payment: Pro-rata
+                    let firstPaymentDate = new Date(currentRefDate.getFullYear(), currentRefDate.getMonth(), 10);
+                    if (currentRefDate.getDate() >= 7) {
+                        firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
+                    }
+
+                    const diffTime = firstPaymentDate.getTime() - currentRefDate.getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const proRataDividend = (amount * (rentabilidade / 100) / 30) * diffDays;
+
+                    calendarRecords.push({
+                        contrato_id: updatedContract.id,
+                        cliente_id: updatedContract.user_id,
+                        consultor_id: null, // Essential for key matching in batch insert
+                        data: firstPaymentDate.toISOString().split('T')[0],
+                        valor: proRataDividend,
+                        evento: 'Pro-rata',
+                        dividendos_clientes: true,
+                        comissao_consultor: false,
+                        comissao_consultor_lider: false,
+                        pago: false
                     });
+
+                    if (consultorId) {
+                        calendarRecords.push({
+                            contrato_id: updatedContract.id,
+                            cliente_id: updatedContract.user_id,
+                            consultor_id: consultorId,
+                            valor: proRataDividend * 0.04,
+                            data: firstPaymentDate.toISOString().split('T')[0],
+                            evento: 'Comissão sobre Pro-rata (4%)',
+                            dividendos_clientes: false,
+                            comissao_consultor: true,
+                            comissao_consultor_lider: false,
+                            pago: false
+                        });
+                    }
+
+                    // Subsequent monthly dividends
+                    let monthlyPaymentDate = new Date(firstPaymentDate);
+                    const monthlyDividend = amount * (rentabilidade / 100);
+
+                    for (let i = 1; i < period; i++) {
+                        monthlyPaymentDate.setMonth(monthlyPaymentDate.getMonth() + 1);
+                        const paymentDateStr = monthlyPaymentDate.toISOString().split('T')[0];
+
+                        calendarRecords.push({
+                            contrato_id: updatedContract.id,
+                            cliente_id: updatedContract.user_id,
+                            consultor_id: null,
+                            data: paymentDateStr,
+                            valor: monthlyDividend,
+                            evento: 'Dividendo',
+                            dividendos_clientes: true,
+                            comissao_consultor: false,
+                            comissao_consultor_lider: false,
+                            pago: false
+                        });
+
+                        if (consultorId) {
+                            calendarRecords.push({
+                                contrato_id: updatedContract.id,
+                                cliente_id: updatedContract.user_id,
+                                consultor_id: consultorId,
+                                valor: monthlyDividend * 0.04,
+                                data: paymentDateStr,
+                                evento: `Comissão sobre Dividendo ${i + 1} (4%)`,
+                                dividendos_clientes: false,
+                                comissao_consultor: true,
+                                comissao_consultor_lider: false,
+                                pago: false
+                            });
+                        }
+                    }
+
+                    // 3. Capital Return at the end
+                    calendarRecords.push({
+                        contrato_id: updatedContract.id,
+                        cliente_id: updatedContract.user_id,
+                        consultor_id: null,
+                        data: data_fim,
+                        valor: amount,
+                        evento: 'Retorno de Aporte',
+                        dividendos_clientes: true,
+                        comissao_consultor: false,
+                        comissao_consultor_lider: false,
+                        pago: false
+                    });
+
+                    // 4. Batch insert into calendario/pagamentos
+                    if (calendarRecords.length > 0) {
+                        server.log.info({ calendarRecordsSample: calendarRecords.slice(0, 2), total: calendarRecords.length }, '[Approval Finalize] Inserting calendar records');
+                        const supabaseUrl = process.env.SUPABASE_URL;
+                        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+                        const calRes = await fetch(
+                            `${supabaseUrl}/rest/v1/calendario%2Fpagamentos`,
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'apikey': serviceKey!,
+                                    'Authorization': `Bearer ${serviceKey}`,
+                                    'Content-Type': 'application/json',
+                                    'Prefer': 'return=minimal'
+                                },
+                                body: JSON.stringify(calendarRecords)
+                            }
+                        );
+
+                        if (!calRes.ok) {
+                            const errTxt = await calRes.text();
+                            server.log.error({ status: calRes.status, errorText: errTxt }, '[Approval Finalize] Supabase POST error');
+                            throw new Error(`Erro ao gerar calendário: ${errTxt}`);
+                        } else {
+                            server.log.info('[Approval Finalize] Calendar records inserted successfully');
+                        }
+                    }
+
+                    // --- Notifications ---
+                    const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+                    const commonContent = `O contrato "${updatedContract.titulo}" foi ativado em ${startDt.toLocaleDateString('pt-BR')}. Status: Vigente. Valor do Aporte: ${formatCurrency(amount)}. Regra de Pagamento: Todo dia 10.`;
+
+                    // 1. Notify Client
+                    if (updatedContract.user_id) {
+                        await supabase.from('notificacoes').insert({
+                            user_id: updatedContract.user_id,
+                            type: 'Sistema',
+                            title: 'Contrato Ativado e Vigente',
+                            content: `${commonContent} Seu calendário de dividendos (Rentabilidade: ${rentabilidade}%) já está disponível no seu painel.`,
+                            is_read: false
+                        });
+                    }
+
+                    // 2. Notify Consultant
+                    if (consultorId) {
+                        await supabase.from('notificacoes').insert({
+                            user_id: consultorId,
+                            type: 'Sistema',
+                            title: 'Novo Contrato em Carteira',
+                            content: `${commonContent} Sua comissão de 4% sobre os dividendos pagos ao cliente foi provisionada.`,
+                            is_read: false
+                        });
+                    }
+
+                    // 3. Notify Leader
+                    if (liderId) {
+                        await supabase.from('notificacoes').insert({
+                            user_id: liderId,
+                            type: 'Sistema',
+                            title: 'Comissão de Líder Gerada',
+                            content: `${commonContent} Sua participação de liderança (0.10%) foi gerada com sucesso.`,
+                            is_read: false
+                        });
+                    }
+
+                    // 4. Notify Administrators
+                    const { data: adminUsers } = await supabase.from('usuarios').select('id').eq('role', 'admin');
+                    if (adminUsers && adminUsers.length > 0) {
+                        const adminNotifications = adminUsers.map(admin => ({
+                            user_id: admin.id,
+                            type: 'Sistema',
+                            title: 'Contrato Ativado com Sucesso',
+                            content: `O contrato "${updatedContract.titulo}" (${updatedContract.codigo}) do cliente ${updatedContract.user_id} foi ativado. Sistema gerou calendário de pagamentos e comissões automaticamente.`,
+                            is_read: false
+                        }));
+                        await supabase.from('notificacoes').insert(adminNotifications);
+                    }
                 }
 
-                return reply.send({ success: true, status: 'Vigente', contract: data });
+                return reply.send({ success: true, status: 'Vigente', contract: updatedContract });
             } else {
                 // Reject the process
-                const { data, error } = await supabase
+                const { data: rejectedData, error: rErr } = await supabase
                     .from('contratos')
                     .update({
                         status: 'Reprovado',
@@ -2070,24 +2157,36 @@ export async function adminRoutes(server: FastifyInstance) {
                     .select()
                     .single();
 
-                if (error) throw error;
+                if (rErr) throw rErr;
 
                 // Notify client
-                if (data?.user_id) {
+                if (rejectedData?.user_id) {
                     await supabase.from('notificacoes').insert({
-                        user_id: data.user_id,
+                        user_id: rejectedData.user_id,
                         type: 'Sistema',
                         title: 'Contrato Reprovado',
-                        content: `Seu contrato "${data.titulo}" foi reprovado. Motivo: ${observacao || 'Não informado'}`,
+                        content: `Seu contrato "${rejectedData.titulo}" foi reprovado. Motivo: ${observacao || 'Não informado'}`,
                         is_read: false
                     });
                 }
 
-                return reply.send({ success: true, status: 'Reprovado', contract: data });
+                // Notify consultant
+                if (rejectedData?.consultor_id) {
+                    await supabase.from('notificacoes').insert({
+                        user_id: rejectedData.consultor_id,
+                        type: 'Sistema',
+                        title: 'Fluxo de aprovação reprovado',
+                        content: `O processo de aprovação final do contrato "${rejectedData.titulo}" foi reprovado pelo administrador. Data da reprovação: ${new Date().toLocaleDateString('pt-BR')}. Motivo: ${observacao || 'Não informado'}`,
+                        is_read: false
+                    });
+                }
+
+                return reply.send({ success: true, status: 'Reprovado', contract: rejectedData });
             }
         } catch (err: any) {
-            console.error('[Approval Finalize] Error:', err);
-            return reply.status(500).send({ error: err.message });
+            console.error('[Approval Finalize] Error:', JSON.stringify(err, null, 2));
+            server.log.error(err);
+            return reply.status(500).send({ error: err.message || 'Erro interno no servidor' });
         }
     });
 

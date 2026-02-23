@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Zap, Loader2 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
+import { DateRange } from './AdminDashboard';
+
 const KPICard = ({ title, value, trend, icon: Icon, loading }: any) => (
-    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start justify-between min-w-[280px]">
+    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-start justify-between w-full">
         <div className="space-y-4 w-full">
             <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#E6F6F7] flex items-center justify-center text-[#00A3B1]">
@@ -19,15 +21,16 @@ const KPICard = ({ title, value, trend, icon: Icon, loading }: any) => (
                 ) : (
                     <h3 className="text-2xl font-bold text-[#002B49]">{value}</h3>
                 )}
-                <p className="text-xs font-medium text-emerald-500 mt-1 flex items-center gap-1">
-                    ↑ {trend} <span className="text-slate-400 font-normal">vs último mês</span>
-                </p>
             </div>
         </div>
     </div>
 );
 
-const KPICards: React.FC = () => {
+interface KPICardsProps {
+    dateRange?: DateRange;
+}
+
+const KPICards: React.FC<KPICardsProps> = ({ dateRange }) => {
     const [stats, setStats] = useState({
         totalAportado: 'R$ 0,00',
         totalConsultores: '0',
@@ -37,19 +40,31 @@ const KPICards: React.FC = () => {
 
     useEffect(() => {
         fetchStats();
-    }, []);
+    }, [dateRange]);
 
     const fetchStats = async () => {
         try {
             setLoading(true);
 
+            let contractsQuery = supabase.from('contratos').select('valor_aporte');
+            let consultantsQuery = supabase.from('usuarios').select('id', { count: 'exact', head: true }).eq('tipo_user', 'Consultor');
+            let clientsQuery = supabase.from('usuarios').select('id', { count: 'exact', head: true }).eq('tipo_user', 'Cliente');
+
+            if (dateRange?.start && dateRange?.end) {
+                // If using created_at for users
+                consultantsQuery = consultantsQuery.gte('created_at', dateRange.start).lte('created_at', dateRange.end + 'T23:59:59');
+                clientsQuery = clientsQuery.gte('created_at', dateRange.start).lte('created_at', dateRange.end + 'T23:59:59');
+                // Assume data_inicio or created_at for contracts
+                contractsQuery = contractsQuery.gte('created_at', dateRange.start).lte('created_at', dateRange.end + 'T23:59:59');
+            }
+
             const [contractsRes, consultantsRes, clientsRes] = await Promise.all([
-                supabase.from('contratos').select('valor'),
-                supabase.from('usuarios').select('id', { count: 'exact', head: true }).eq('tipo_user', 'Consultor'),
-                supabase.from('usuarios').select('id', { count: 'exact', head: true }).eq('tipo_user', 'Cliente')
+                contractsQuery,
+                consultantsQuery,
+                clientsQuery
             ]);
 
-            const total = contractsRes.data?.reduce((acc, curr) => acc + (parseFloat(curr.valor) || 0), 0) || 0;
+            const total = contractsRes.data?.reduce((acc, curr) => acc + (parseFloat(curr.valor_aporte) || 0), 0) || 0;
 
             setStats({
                 totalAportado: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total),

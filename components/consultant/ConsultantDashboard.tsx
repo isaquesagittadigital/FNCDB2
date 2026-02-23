@@ -127,15 +127,15 @@ const ConsultantDashboard: React.FC<ConsultantDashboardProps> = ({ userProfile }
   return (
     <div className="max-w-7xl mx-auto space-y-12 pb-20">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-medium text-[#002B49]">
+      <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
+        <div className="space-y-1 text-center md:text-left">
+          <h1 className="text-2xl sm:text-3xl font-medium text-[#002B49]">
             Bem-vindo(a) de volta, <span className="font-bold text-[#00A3B1]">{displayName}</span>
           </h1>
           <p className="text-slate-400 text-sm font-medium">Gerencie suas participações com elegância e simplicidade.</p>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-4">
           <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-100 shadow-sm">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
               ID: {userProfile?.codigo_user || '—'}
@@ -388,7 +388,7 @@ const ConsultantDashboard: React.FC<ConsultantDashboardProps> = ({ userProfile }
                           </td>
                           <td className="px-5 py-4 text-slate-500">{c.taxa_mensal}%</td>
                           <td className="px-5 py-4 text-slate-500">{c.periodo_meses} meses</td>
-                          <td className="px-5 py-4 text-slate-400">{formatDate(c.data_fim)}</td>
+                          <td className="px-5 py-4 text-slate-400">{c.data_fim ? formatDate(c.data_fim) : c.data_final ? formatDate(c.data_final) : (c.data_inicio && c.periodo_meses ? new Date(new Date(c.data_inicio + 'T12:00:00Z').setMonth(new Date(c.data_inicio + 'T12:00:00Z').getMonth() + parseInt(c.periodo_meses))).toLocaleDateString('pt-BR') : '-')}</td>
                         </tr>
                       ))}
                     </tbody>

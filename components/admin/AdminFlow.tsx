@@ -26,6 +26,7 @@ import ApprovalDetails from './approval/ApprovalDetails';
 import { ApprovalProcess } from './approval/types';
 import ClientsView from './clients/ClientsView';
 import InvoicesView from './invoices/InvoicesView';
+import SuccessModal from '../shared/ui/SuccessModal';
 import EmptyState from '../shared/ui/EmptyState';
 import { adminMenu } from './menu';
 import { getTabFromSlug, getRoutePath } from '../../lib/routes';
@@ -40,6 +41,8 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
     const [processes, setProcesses] = useState<ApprovalProcess[]>([]);
     const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
     const [loadingProcesses, setLoadingProcesses] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [successData, setSuccessData] = useState({ title: '', message: '' });
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -132,6 +135,15 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
                 }
                 return p;
             }));
+
+            if (approved) {
+                setSuccessData({
+                    title: 'Processo Finalizado!',
+                    message: 'O contrato foi ativado com sucesso e o cronograma de pagamentos foi gerado.'
+                });
+                setShowSuccessModal(true);
+            }
+
             setSelectedProcessId(null);
         } catch (err) {
             console.error('[AdminFlow] Error finalizing process:', err);
@@ -247,6 +259,13 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
             sidebarTheme="light"
         >
             {renderContent()}
+
+            <SuccessModal
+                isOpen={showSuccessModal}
+                onClose={() => setShowSuccessModal(false)}
+                title={successData.title}
+                message={successData.message}
+            />
         </DashboardLayout>
     );
 };

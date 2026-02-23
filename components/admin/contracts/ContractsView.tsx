@@ -7,6 +7,7 @@ import ContractStatusBadge from '../../shared/ui/ContractStatusBadge';
 import { CONTRACT_STATUSES } from '../../../lib/contractStatus';
 import SimulatorView from '../../simulator/SimulatorView';
 import { calculateContractProjection } from '../../../lib/financialUtils';
+import SendContractConfirmationModal from '../../shared/modals/SendContractConfirmationModal';
 
 const ContractsView = ({ userProfile }: { userProfile?: any }) => {
     // Mock data based on the image provided
@@ -17,6 +18,12 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [selectedContract, setSelectedContract] = useState<any>(null);
     const [feedbackModal, setFeedbackModal] = useState<{ type: 'success' | 'error' | 'warning'; title: string; message: string } | null>(null);
+
+    // Clicksign Flow States
+    const [showClicksignModal, setShowClicksignModal] = useState(false);
+    const [clicksignLoading, setClicksignLoading] = useState(false);
+    const [lastCreatedContractId, setLastCreatedContractId] = useState<string | null>(null);
+    const [contractSendMethod, setContractSendMethod] = useState<'Email' | 'Whatsapp' | 'SMS'>('Email');
     // Filter States
     const [filterClient, setFilterClient] = useState('');
     const [filterConsultor, setFilterConsultor] = useState('');
@@ -42,7 +49,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
     const fetchContracts = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts`);
+            const res = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/contracts`);
             if (res.ok) {
                 const data = await res.json();
                 const contractList = Array.isArray(data) ? data : [];
@@ -54,8 +61,10 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                     amount: c.valor_aporte ? `R$ ${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(c.valor_aporte)}` : '-',
                     yield: c.taxa_mensal ? `${c.taxa_mensal}%` : '-',
                     period: c.periodo_meses ? `${c.periodo_meses}` : '-',
-                    date: c.data_inicio ? new Date(c.data_inicio).toLocaleDateString('pt-BR') : '-',
-                    end: c.data_final ? new Date(c.data_final).toLocaleDateString('pt-BR') : '-',
+                    date: c.data_inicio ? new Date(c.data_inicio + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-',
+                    end: (c.data_fim || c.data_final) ? new Date((c.data_fim || c.data_final) + 'T12:00:00Z').toLocaleDateString('pt-BR') : (
+                        c.data_inicio && c.periodo_meses ? new Date(new Date(c.data_inicio + 'T12:00:00Z').setMonth(new Date(c.data_inicio + 'T12:00:00Z').getMonth() + parseInt(c.periodo_meses))).toLocaleDateString('pt-BR') : '-'
+                    ),
                     clientName: c.client_name || '-',
                     clientCpf: c.client_cpf || c.client_cnpj || '',
                     consultorId: c.consultor_id || '',
@@ -72,7 +81,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
 
     const fetchClients = async () => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?limit=200`);
+            const response = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/clients?limit=200`);
             if (!response.ok) throw new Error('Falha ao buscar clientes');
             const data = await response.json();
             if (Array.isArray(data)) {
@@ -89,7 +98,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
 
     const fetchConsultors = async () => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/consultants`);
+            const response = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/consultants`);
             if (!response.ok) throw new Error('Falha ao buscar consultores');
             const data = await response.json();
             if (Array.isArray(data)) {
@@ -116,7 +125,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
     const handleDelete = async (id: string) => {
         if (!window.confirm('Tem certeza que deseja excluir este contrato?')) return;
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts/${id}`, {
+            const res = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/contracts/${id}`, {
                 method: 'DELETE'
             });
             if (res.ok) {
@@ -186,7 +195,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                 user_id: clientId,
                 // Admin doesn't necessarily have a consultant ID, but we can send userProfile.id if needed, or null
                 consultor_id: userProfile?.tipo_user === 'Consultor' ? userProfile.id : null,
-                titulo: 'Câmbio',
+                titulo: '0001 - Câmbio',
                 valor_aporte: amount,
                 taxa_mensal: rate,
                 taxa_consultor: consultantRateVal,
@@ -198,7 +207,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                 status: 'Rascunho'
             };
 
-            const contractRes = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts`, {
+            const contractRes = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/contracts`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(contractPayload)
@@ -259,7 +268,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                 }))
             ];
 
-            const calendarRes = await fetch(`${import.meta.env.VITE_API_URL}/admin/calendar-payments`, {
+            const calendarRes = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/calendar-payments`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ payments: paymentsToInsert })
@@ -270,24 +279,10 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                 throw new Error(errData.error || 'Falha ao criar pagamentos');
             }
 
-            // Immediately send to Clicksign directly for admin
-            try {
-                const clicksignRes = await fetch(`${import.meta.env.VITE_API_URL}/admin/clicksign/send-contract`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contractId: contractData.id, sendMethod: sendMethod })
-                });
-
-                if (clicksignRes.ok) {
-                    setFeedbackModal({ type: 'success', title: 'Contrato enviado!', message: 'O contrato foi criado e enviado para assinatura digital com sucesso. Os signatários receberão um e-mail com o link para assinar.' });
-                } else {
-                    console.error("Falha ao enviar clicksign");
-                    setFeedbackModal({ type: 'warning', title: 'Contrato criado', message: 'O contrato foi criado, mas houve uma falha ao enviar para a assinatura digital. Tente reenviar manualmente.' });
-                }
-            } catch (clickerr) {
-                console.error("Erro clicksign", clickerr);
-                setFeedbackModal({ type: 'warning', title: 'Contrato criado', message: 'O contrato foi criado, mas houve um erro ao comunicar com a Clicksign. Tente reenviar manualmente.' });
-            }
+            // Instead of sending directly, we now open the confirmation modal
+            setLastCreatedContractId(contractData.id);
+            setContractSendMethod(sendMethod);
+            setShowClicksignModal(true);
 
             setViewMode('list');
             fetchContracts();
@@ -297,6 +292,54 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleClicksignConfirm = async () => {
+        if (!lastCreatedContractId) return;
+        setClicksignLoading(true);
+
+        try {
+            const res = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/clicksign/send-contract`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contractId: lastCreatedContractId,
+                    sendMethod: contractSendMethod
+                })
+            });
+
+            if (!res.ok) {
+                const errData = await res.json();
+                throw new Error(errData.error || 'Falha ao enviar para assinatura');
+            }
+
+            setShowClicksignModal(false);
+            setFeedbackModal({
+                type: 'success',
+                title: 'Contrato enviado!',
+                message: 'O contrato foi enviado para assinatura digital com sucesso. Os signatários receberão uma notificação com o link para assinar.'
+            });
+            fetchContracts();
+        } catch (error: any) {
+            console.error('Clicksign error:', error);
+            setFeedbackModal({
+                type: 'error',
+                title: 'Erro ao enviar',
+                message: error.message || 'Falha ao enviar para assinatura.'
+            });
+        } finally {
+            setClicksignLoading(false);
+        }
+    };
+
+    const handleClicksignCancel = () => {
+        setShowClicksignModal(false);
+        setLastCreatedContractId(null);
+        setFeedbackModal({
+            type: 'success',
+            title: 'Contrato salvo',
+            message: 'O contrato foi salvo como rascunho com sucesso.'
+        });
     };
 
     if (viewMode === 'create') {
@@ -405,8 +448,8 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                         >
                             <option value="">Selecione o produto</option>
                             <option value="0001 - Câmbio">0001 - Câmbio</option>
-                            <option value="0002 - Crédito Privado">0002 - Crédito Privado</option>
-                            <option value="0003 - Fundo Exclusivo">0003 - Fundo Exclusivo</option>
+                            <option value="0002 - Recebíveis (Em Breve)">0002 - Recebíveis (Em Breve)</option>
+                            <option value="0003 - Consignado (Em Breve)">0003 - Consignado (Em Breve)</option>
                         </select>
                     </div>
                 </div>
@@ -570,6 +613,14 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
             <FeedbackModal
                 data={feedbackModal}
                 onClose={() => setFeedbackModal(null)}
+            />
+
+            {/* Clicksign Confirmation Modal */}
+            <SendContractConfirmationModal
+                isOpen={showClicksignModal}
+                onConfirm={handleClicksignConfirm}
+                onCancel={handleClicksignCancel}
+                loading={clicksignLoading}
             />
         </div>
     );

@@ -32,7 +32,7 @@ const AccordionSection: React.FC<{ title: string; children: React.ReactNode; ico
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div className="border-t border-slate-100 last:border-b">
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between py-6 group hover:px-2 transition-all"
       >
@@ -101,7 +101,7 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, contract
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
         {/* Backdrop */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -124,7 +124,7 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, contract
               </div>
               <h2 className="text-xl font-bold text-[#002B49]">Informações do contrato</h2>
             </div>
-            <button 
+            <button
               onClick={onClose}
               className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-300 hover:text-red-500"
             >
@@ -134,47 +134,45 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, contract
 
           {/* Scrollable Body */}
           <div className="flex-1 overflow-y-auto p-8 space-y-12 no-scrollbar">
-            
+
             {/* Top Summary Info */}
             <div className="bg-[#F8FAFB] rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
-               <div className="grid grid-cols-4 border-b border-slate-100 bg-white/50">
-                 {['Status', 'Contrato é unificado?', 'Cód. externo', 'Cód. contrato'].map(h => (
-                   <div key={h} className="p-4 text-[11px] font-bold text-[#64748B] uppercase tracking-wider">{h}</div>
-                 ))}
-               </div>
-               <div className="grid grid-cols-4 items-center">
-                 <div className="p-4"><StatusBadge status="Vigente" /></div>
-                 <div className="p-4 text-sm font-bold text-[#002B49]">Não</div>
-                 <div className="p-4 text-sm font-bold text-[#002B49]">-</div>
-                 <div className="p-4 text-sm font-bold text-[#002B49]">00000</div>
-               </div>
+              <div className="grid grid-cols-4 border-b border-slate-100 bg-white/50">
+                {['Status', 'Contrato é unificado?', 'Cód. externo', 'Cód. contrato'].map(h => (
+                  <div key={h} className="p-4 text-[11px] font-bold text-[#64748B] uppercase tracking-wider">{h}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-4 items-center">
+                <div className="p-4"><StatusBadge status={contract.status || 'Vigente'} /></div>
+                <div className="p-4 text-sm font-bold text-[#002B49]">Não</div>
+                <div className="p-4 text-sm font-bold text-[#002B49]">{contract.codigo_externo || '-'}</div>
+                <div className="p-4 text-sm font-bold text-[#002B49]">{contract.codigo || contract.id?.substring(0, 6) || '00000'}</div>
+              </div>
             </div>
 
             {/* Main Sections */}
             <Section title="Contrato">
-              <Field label="Produto" value="0001 - Câmbio" />
-              <Field label="Descrição do produto" value="Uma descrição" />
-              <Field label="Segmento" value="Câmbio" />
+              <Field label="Produto" value={contract.titulo || '0001 - Câmbio'} />
+              <Field label="Descrição do produto" value={contract.titulo?.includes('Câmbio') ? 'Operações de câmbio e remessas' : 'Descrição do produto'} />
+              <Field label="Segmento" value={contract.titulo?.split(' - ')[1] || 'Câmbio'} />
               <Field label="Tipo do rendimento" value="Mensal" />
-              <Field label="Valor aportado" value="R$ 1.500,00" sensitive={true} isVisible={isValuesVisible} />
-              <Field label="Produto" value="Câmbio" />
-              <Field label="Produto" value="-" />
-              <Field label="Data do aporte" value="05/06/2025" />
-              <Field label="Fim da vigência" value="10/08/2025" />
-              <Field label="Período" value="12 meses" />
-              <Field label="Rentabilidade % (a.m.)" value="2%" sensitive={true} isVisible={isValuesVisible} />
+              <Field label="Valor aportado" value={contract.valor_aporte ? `R$ ${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(contract.valor_aporte)}` : '-'} sensitive={true} isVisible={isValuesVisible} />
+              <Field label="Data do aporte" value={contract.data_inicio ? new Date(contract.data_inicio + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-'} />
+              <Field label="Fim da vigência" value={contract.data_fim ? new Date(contract.data_fim + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-'} />
+              <Field label="Período" value={`${contract.periodo_meses || '-'} meses`} />
+              <Field label="Rentabilidade % (a.m.)" value={`${contract.taxa_mensal || '-'}%`} sensitive={true} isVisible={isValuesVisible} />
             </Section>
 
             <Section title="Cliente">
-              <Field label="Nome" value="Carla Gandolfo" />
-              <Field label="Telefone" value="(11) 00000-0000" />
-              <Field label="Sexo" value="Feminino" />
+              <Field label="Nome" value={contract.client_name || 'Carla Gandolfo'} />
+              <Field label="Telefone" value={contract.client_phone || '-'} />
+              <Field label="Sexo" value={contract.client_gender || '-'} />
               <div />
-              <Field label="CPF" value="000.000.000-00" sensitive={true} isVisible={isValuesVisible} />
-              <Field label="Data de nascimento" value="00/00/0000" sensitive={true} isVisible={isValuesVisible} />
+              <Field label="CPF" value={contract.client_cpf || contract.client_cnpj || '-'} sensitive={true} isVisible={isValuesVisible} />
+              <Field label="Data de nascimento" value={contract.client_birth_date ? new Date(contract.client_birth_date + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-'} sensitive={true} isVisible={isValuesVisible} />
               <div /> <div />
-              <Field label="Email" value="user@gmail.com" sensitive={true} isVisible={isValuesVisible} />
-              <Field label="Profissão" value="Empresária" />
+              <Field label="Email" value={contract.client_email || '-'} sensitive={true} isVisible={isValuesVisible} />
+              <Field label="Profissão" value={contract.client_profession || '-'} />
             </Section>
 
             <Section title="Dados bancários - Cliente">
@@ -200,8 +198,8 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, contract
             </Section>
 
             <Section title="Unidade">
-               <Field label="CNPJ" value="00.000.000/0001-00" />
-               <Field label="Descrição da unidade" value="FNCD Capital" />
+              <Field label="CNPJ" value="00.000.000/0001-00" />
+              <Field label="Descrição da unidade" value="FNCD Capital" />
             </Section>
 
             {/* Status History Table */}
@@ -240,145 +238,145 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, contract
 
             {/* Comments & Anexos Accordion Style */}
             <div className="space-y-6">
-               <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[#002B49] tracking-widest uppercase">Comentários</h3>
-                  <button className="flex items-center gap-2 text-[#00A3B1] font-bold text-xs hover:underline">
-                    <MessageSquare size={14} /> Adicionar comentário
-                  </button>
-               </div>
-               <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left">
-                     <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase">
-                        <tr>
-                           <th className="p-4">Data de inclusão ↕</th>
-                           <th className="p-4">Comentário</th>
-                           <th className="p-4">Cliente</th>
-                           <th className="p-4 text-right"></th>
-                        </tr>
-                     </thead>
-                     <tbody className="text-xs">
-                        <tr>
-                           <td className="p-4 text-slate-400">-</td>
-                           <td className="p-4 text-slate-400">-</td>
-                           <td className="p-4 text-slate-400">-</td>
-                           <td className="p-4 text-right flex items-center justify-end gap-3 font-bold uppercase tracking-wider">
-                              <span className="text-slate-300 cursor-not-allowed">Apagar</span>
-                              <span className="text-[#00A3B1] cursor-pointer hover:underline">Editar</span>
-                           </td>
-                        </tr>
-                     </tbody>
-                  </table>
-               </div>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-[#002B49] tracking-widest uppercase">Comentários</h3>
+                <button className="flex items-center gap-2 text-[#00A3B1] font-bold text-xs hover:underline">
+                  <MessageSquare size={14} /> Adicionar comentário
+                </button>
+              </div>
+              <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                <table className="w-full text-left">
+                  <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase">
+                    <tr>
+                      <th className="p-4">Data de inclusão ↕</th>
+                      <th className="p-4">Comentário</th>
+                      <th className="p-4">Cliente</th>
+                      <th className="p-4 text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-xs">
+                    <tr>
+                      <td className="p-4 text-slate-400">-</td>
+                      <td className="p-4 text-slate-400">-</td>
+                      <td className="p-4 text-slate-400">-</td>
+                      <td className="p-4 text-right flex items-center justify-end gap-3 font-bold uppercase tracking-wider">
+                        <span className="text-slate-300 cursor-not-allowed">Apagar</span>
+                        <span className="text-[#00A3B1] cursor-pointer hover:underline">Editar</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="space-y-6">
-               <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-[#002B49] tracking-widest uppercase">Anexos</h3>
-                  <button className="flex items-center gap-2 text-[#00A3B1] font-bold text-xs hover:underline">
-                    <Plus size={14} /> Upload
-                  </button>
-               </div>
-               <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
-                  <table className="w-full text-left text-xs">
-                     <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
-                        <tr>
-                           <th className="p-4">Data de inclusão ↕</th>
-                           <th className="p-4">Tipo de documento ↕</th>
-                           <th className="p-4">Tipo de transferência ↕</th>
-                           <th className="p-4">Nome arq.</th>
-                           <th className="p-4">Status</th>
-                           <th className="p-4"></th>
-                        </tr>
-                     </thead>
-                     <tbody>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                           <td className="p-4 text-slate-500">05/10/2025</td>
-                           <td className="p-4 font-bold text-[#002B49]">Contrato</td>
-                           <td className="p-4 text-slate-400">-</td>
-                           <td className="p-4 text-slate-500">12345.pdf</td>
-                           <td className="p-4"><StatusBadge status="Ativo" /></td>
-                           <td className="p-4 text-right">
-                              <button className="text-[#00A3B1] font-bold hover:underline inline-flex items-center gap-1">
-                                 <Download size={14} /> Download
-                              </button>
-                           </td>
-                        </tr>
-                     </tbody>
-                  </table>
-               </div>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-[#002B49] tracking-widest uppercase">Anexos</h3>
+                <button className="flex items-center gap-2 text-[#00A3B1] font-bold text-xs hover:underline">
+                  <Plus size={14} /> Upload
+                </button>
+              </div>
+              <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
+                    <tr>
+                      <th className="p-4">Data de inclusão ↕</th>
+                      <th className="p-4">Tipo de documento ↕</th>
+                      <th className="p-4">Tipo de transferência ↕</th>
+                      <th className="p-4">Nome arq.</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="hover:bg-slate-50 transition-colors">
+                      <td className="p-4 text-slate-500">05/10/2025</td>
+                      <td className="p-4 font-bold text-[#002B49]">Contrato</td>
+                      <td className="p-4 text-slate-400">-</td>
+                      <td className="p-4 text-slate-500">12345.pdf</td>
+                      <td className="p-4"><StatusBadge status="Ativo" /></td>
+                      <td className="p-4 text-right">
+                        <button className="text-[#00A3B1] font-bold hover:underline inline-flex items-center gap-1">
+                          <Download size={14} /> Download
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Accordion List for Comissões and Dividendos */}
             <div className="space-y-2">
-               <AccordionSection title="Comissões" icon={Calculator}>
-                  <div className="bg-white border border-slate-100 rounded-xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                       <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase">
-                          <tr>
-                             <th className="p-4">Consultor ↕</th>
-                             <th className="p-4">Doc. consultor ↕</th>
-                             <th className="p-4">Parcela</th>
-                             <th className="p-4">Spread</th>
-                             <th className="p-4">Data de vencimento ↕</th>
-                             <th className="p-4">Valor comissão</th>
-                             <th className="p-4">Status</th>
-                          </tr>
-                       </thead>
-                       <tbody className="divide-y divide-slate-50">
-                          {[
-                             { name: 'CARLA GANDOLFO...', doc: '000.000.000-00', p: '1', s: '0', date: '10/08/2025', val: 'R$ 50,00', status: 'Sucesso' },
-                             { name: 'CARLA GANDOLFO...', doc: '000.000.000-00', p: '2', s: '0', date: '10/08/2025', val: 'R$ 50,00', status: 'Não processada' },
-                          ].map((row, i) => (
-                             <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                <td className="p-4 font-bold text-[#002B49] uppercase">{row.name}</td>
-                                <td className="p-4 text-slate-500" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.doc}</td>
-                                <td className="p-4 text-[#002B49] font-medium">{row.p}</td>
-                                <td className="p-4 text-slate-500">{row.s}</td>
-                                <td className="p-4 text-slate-500">{row.date}</td>
-                                <td className="p-4 font-bold text-[#002B49]" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.val}</td>
-                                <td className="p-4"><StatusBadge status={row.status} /></td>
-                             </tr>
-                          ))}
-                       </tbody>
-                    </table>
-                  </div>
-               </AccordionSection>
+              <AccordionSection title="Comissões" icon={Calculator}>
+                <div className="bg-white border border-slate-100 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase">
+                      <tr>
+                        <th className="p-4">Consultor ↕</th>
+                        <th className="p-4">Doc. consultor ↕</th>
+                        <th className="p-4">Parcela</th>
+                        <th className="p-4">Spread</th>
+                        <th className="p-4">Data de vencimento ↕</th>
+                        <th className="p-4">Valor comissão</th>
+                        <th className="p-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {[
+                        { name: 'CARLA GANDOLFO...', doc: '000.000.000-00', p: '1', s: '0', date: '10/08/2025', val: 'R$ 50,00', status: 'Sucesso' },
+                        { name: 'CARLA GANDOLFO...', doc: '000.000.000-00', p: '2', s: '0', date: '10/08/2025', val: 'R$ 50,00', status: 'Não processada' },
+                      ].map((row, i) => (
+                        <tr key={i} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4 font-bold text-[#002B49] uppercase">{row.name}</td>
+                          <td className="p-4 text-slate-500" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.doc}</td>
+                          <td className="p-4 text-[#002B49] font-medium">{row.p}</td>
+                          <td className="p-4 text-slate-500">{row.s}</td>
+                          <td className="p-4 text-slate-500">{row.date}</td>
+                          <td className="p-4 font-bold text-[#002B49]" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.val}</td>
+                          <td className="p-4"><StatusBadge status={row.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </AccordionSection>
 
-               <AccordionSection title="Dividendos" icon={Calculator}>
-                  <div className="bg-white border border-slate-100 rounded-xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
-                       <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase">
-                          <tr>
-                             <th className="p-4">Parcela ↕</th>
-                             <th className="p-4">Vencimento ↕</th>
-                             <th className="p-4">Dias pro rata</th>
-                             <th className="p-4">Valor div.</th>
-                             <th className="p-4">Status</th>
-                             <th className="p-4">Tipo</th>
-                             <th className="p-4">Valor div. pago</th>
-                             <th className="p-4">Data pgmto.</th>
-                          </tr>
-                       </thead>
-                       <tbody className="divide-y divide-slate-50">
-                          {[
-                             { p: '01', v: '10/08/2025', d: '-25', val: 'R$ 50,00', status: 'Processado', type: 'Dividendo', valP: 'R$ 50,00', pg: 'R$ 50,00' },
-                             { p: '02', v: '10/08/2025', d: '0', val: 'R$ 50,00', status: 'Não processado', type: 'Dividendo', valP: 'R$ 50,00', pg: 'R$ 50,00' },
-                          ].map((row, i) => (
-                             <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                <td className="p-4 font-bold text-[#64748B]">{row.p}</td>
-                                <td className="p-4 font-bold text-[#002B49]">{row.v}</td>
-                                <td className="p-4 text-slate-400">{row.d}</td>
-                                <td className="p-4 text-[#002B49] font-medium" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.val}</td>
-                                <td className="p-4"><StatusBadge status={row.status} /></td>
-                                <td className="p-4 text-slate-500">{row.type}</td>
-                                <td className="p-4 text-[#002B49] font-medium" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.valP}</td>
-                                <td className="p-4 text-[#002B49] font-bold" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.pg}</td>
-                             </tr>
-                          ))}
-                       </tbody>
-                    </table>
-                  </div>
-               </AccordionSection>
+              <AccordionSection title="Dividendos" icon={Calculator}>
+                <div className="bg-white border border-slate-100 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#F8FAFB] border-b border-slate-100 text-[10px] font-bold text-[#64748B] uppercase">
+                      <tr>
+                        <th className="p-4">Parcela ↕</th>
+                        <th className="p-4">Vencimento ↕</th>
+                        <th className="p-4">Dias pro rata</th>
+                        <th className="p-4">Valor div.</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4">Tipo</th>
+                        <th className="p-4">Valor div. pago</th>
+                        <th className="p-4">Data pgmto.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {[
+                        { p: '01', v: '10/08/2025', d: '-25', val: 'R$ 50,00', status: 'Processado', type: 'Dividendo', valP: 'R$ 50,00', pg: 'R$ 50,00' },
+                        { p: '02', v: '10/08/2025', d: '0', val: 'R$ 50,00', status: 'Não processado', type: 'Dividendo', valP: 'R$ 50,00', pg: 'R$ 50,00' },
+                      ].map((row, i) => (
+                        <tr key={i} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4 font-bold text-[#64748B]">{row.p}</td>
+                          <td className="p-4 font-bold text-[#002B49]">{row.v}</td>
+                          <td className="p-4 text-slate-400">{row.d}</td>
+                          <td className="p-4 text-[#002B49] font-medium" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.val}</td>
+                          <td className="p-4"><StatusBadge status={row.status} /></td>
+                          <td className="p-4 text-slate-500">{row.type}</td>
+                          <td className="p-4 text-[#002B49] font-medium" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.valP}</td>
+                          <td className="p-4 text-[#002B49] font-bold" style={{ filter: !isValuesVisible ? 'blur(4px)' : 'none' }}>{row.pg}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </AccordionSection>
             </div>
           </div>
         </motion.div>

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Eye, Check, X, Clock, AlertCircle } from 'lucide-react';
+import StepConfirmationModal from './modals/StepConfirmationModal';
 import { ProcessStep, ApprovalStatus } from './types';
 
 interface ComplianceCheckRowProps {
@@ -10,6 +11,8 @@ interface ComplianceCheckRowProps {
 }
 
 const ComplianceCheckRow: React.FC<ComplianceCheckRowProps> = ({ step, onViewDocument, onApprove, onReject }) => {
+    const [showConfirmation, setShowConfirmation] = useState(false);
+
     const getStatusInfo = (status: ApprovalStatus) => {
         switch (status) {
             case 'approved':
@@ -85,7 +88,7 @@ const ComplianceCheckRow: React.FC<ComplianceCheckRowProps> = ({ step, onViewDoc
                 {step.status === 'pending' && (
                     <div className="flex-shrink-0 ml-4">
                         <button
-                            onClick={onApprove}
+                            onClick={() => setShowConfirmation(true)}
                             className="bg-[#009ca6] hover:bg-[#007F87] text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"
                         >
                             <Check className="w-4 h-4" />
@@ -94,6 +97,19 @@ const ComplianceCheckRow: React.FC<ComplianceCheckRowProps> = ({ step, onViewDoc
                     </div>
                 )}
             </div>
+
+            <StepConfirmationModal
+                isOpen={showConfirmation}
+                onClose={() => setShowConfirmation(false)}
+                onApprove={() => {
+                    setShowConfirmation(false);
+                    onApprove();
+                }}
+                onReject={() => {
+                    setShowConfirmation(false);
+                    onReject();
+                }}
+            />
         </div>
     );
 };

@@ -21,9 +21,10 @@ import {
   XCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import ContractModal from '../shared/modals/ContractModal';
+import ContractDetailModal from '../shared/ContractDetailModal';
 import SimulatorView from '../simulator/SimulatorView';
 import ContractForm from '../admin/contracts/ContractForm';
+import SendContractConfirmationModal from '../shared/modals/SendContractConfirmationModal';
 
 import ContractStatusBadge from '../shared/ui/ContractStatusBadge';
 import { CONTRACT_STATUSES } from '../../lib/contractStatus';
@@ -43,6 +44,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
   const [showClicksignModal, setShowClicksignModal] = useState(false);
   const [clicksignLoading, setClicksignLoading] = useState(false);
   const [lastCreatedContractId, setLastCreatedContractId] = useState<string | null>(null);
+  const [selectedContract, setSelectedContract] = useState<any>(null);
 
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; code: string } | null>(null);
   const [feedbackModal, setFeedbackModal] = useState<{ type: 'success' | 'error' | 'warning'; title: string; message: string } | null>(null);
@@ -106,7 +108,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
   const fetchContracts = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts`);
+      const response = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/contracts`);
       if (!response.ok) throw new Error('Falha ao buscar contratos');
 
       const data = await response.json();
@@ -120,8 +122,10 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
         amount: c.valor_aporte ? `R$ ${new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(c.valor_aporte)}` : '-',
         yield: c.taxa_mensal ? `${c.taxa_mensal}%` : '-',
         period: c.periodo_meses ? `${c.periodo_meses}` : '-',
-        date: c.data_inicio ? new Date(c.data_inicio).toLocaleDateString('pt-BR') : '-',
-        end: c.data_final ? new Date(c.data_final).toLocaleDateString('pt-BR') : '-',
+        date: c.data_inicio ? new Date(c.data_inicio + 'T12:00:00Z').toLocaleDateString('pt-BR') : '-',
+        end: (c.data_fim || c.data_final) ? new Date((c.data_fim || c.data_final) + 'T12:00:00Z').toLocaleDateString('pt-BR') : (
+          c.data_inicio && c.periodo_meses ? new Date(new Date(c.data_inicio + 'T12:00:00Z').setMonth(new Date(c.data_inicio + 'T12:00:00Z').getMonth() + parseInt(c.periodo_meses))).toLocaleDateString('pt-BR') : '-'
+        ),
         clientName: c.client_name || '-',
         fullData: c
       })) || [];
@@ -138,7 +142,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
   const fetchClients = async () => {
     setClientsLoading(true);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?limit=200`);
+      const response = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/clients?limit=200`);
       if (!response.ok) throw new Error('Falha ao buscar clientes');
 
       const { data: apiData } = await response.json();
@@ -162,7 +166,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
 
   const fetchConsultors = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?limit=500`);
+      const response = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/clients?limit=500`);
       if (!response.ok) return;
       const { data: apiData } = await response.json();
       const list = Array.isArray(apiData) ? apiData : [];
@@ -311,7 +315,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
       const contractPayload = {
         user_id: clientId,
         consultor_id: userProfile?.id,
-        titulo: 'Câmbio',
+        titulo: '0001 - Câmbio',
         valor_aporte: amount,
         taxa_mensal: rate,
         taxa_consultor: consultantRateVal,
@@ -323,7 +327,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
         status: 'Rascunho'
       };
 
-      const contractRes = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts`, {
+      const contractRes = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/contracts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(contractPayload)
@@ -384,7 +388,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
         }))
       ];
 
-      const calendarRes = await fetch(`${import.meta.env.VITE_API_URL}/admin/calendar-payments`, {
+      const calendarRes = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/calendar-payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payments: paymentsToInsert })
@@ -411,7 +415,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
     setClicksignLoading(true);
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/clicksign/send-contract`, {
+      const res = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/clicksign/send-contract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contractId: lastCreatedContractId, sendMethod: formData.sendMethod })
@@ -443,7 +447,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
 
   const handleDeleteContract = async (contractId: string) => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/admin/contracts/${contractId}`, {
+      const res = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/contracts/${contractId}`, {
         method: 'DELETE'
       });
       if (!res.ok) {
@@ -512,7 +516,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
               </div>
 
               {/* Row 1: Cliente, Consultor, Produto */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[#002B49]">Cliente</label>
                   <select
@@ -549,15 +553,15 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                     className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-600 bg-white focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/30 focus:border-[#00A3B1] transition-all"
                   >
                     <option value="">Selecione o produto</option>
-                    <option value="FNCD Renda Fixa">FNCD Renda Fixa</option>
-                    <option value="FNCD Renda Variável">FNCD Renda Variável</option>
-                    <option value="FNCD Capital">FNCD Capital</option>
+                    <option value="0001 - Câmbio">0001 - Câmbio</option>
+                    <option value="0002 - Recebíveis (Em Breve)">0002 - Recebíveis (Em Breve)</option>
+                    <option value="0003 - Consignado (Em Breve)">0003 - Consignado (Em Breve)</option>
                   </select>
                 </div>
               </div>
 
               {/* Row 2: Status, CPF/CNPJ, Código externo, Código contrato */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[#002B49]">Status do contrato</label>
                   <select
@@ -607,7 +611,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
               </div>
 
               {/* Row 3: Datas de Aporte */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:grid-cols-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[#002B49]">Aporte (início)<span className="text-red-500">*</span></label>
                   <input
@@ -651,7 +655,11 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                     {loading ? (
                       <tr><td colSpan={8} className="p-8 text-center text-slate-400">Carregando...</td></tr>
                     ) : filteredContracts.map((c, i) => (
-                      <tr key={i} className="text-sm hover:bg-slate-50 transition-colors group">
+                      <tr
+                        key={i}
+                        className="text-sm hover:bg-slate-50 transition-colors group cursor-pointer"
+                        onClick={() => setSelectedContract(c.fullData)}
+                      >
                         <td className="px-6 py-5 font-bold text-[#002B49]">{c.id}</td>
                         <td className="px-6 py-5 text-slate-600">{c.clientName || '-'}</td>
                         <td className="px-6 py-5"><ContractStatusBadge status={c.status} /></td>
@@ -661,6 +669,16 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                         <td className="px-6 py-5 text-slate-400">{c.end}</td>
                         <td className="px-6 py-5">
                           <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedContract(c.fullData);
+                              }}
+                              title="Visualizar detalhes"
+                              className="p-2 text-slate-400 hover:text-[#00A3B1] hover:bg-[#E6F6F7] rounded-lg transition-colors"
+                            >
+                              <Eye size={16} />
+                            </button>
                             {c.status === 'Rascunho' && (
                               <>
                                 <button
@@ -713,6 +731,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
               onBack={() => setViewMode('list')}
               onSave={fetchContracts}
               userProfile={userProfile}
+              onSubmitDetails={handleCreateFromSimulator}
             />
           </motion.div>
         )}
@@ -737,7 +756,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
 
 
       {/* Clicksign Confirmation Modal */}
-      <ClicksignConfirmModal
+      <SendContractConfirmationModal
         isOpen={showClicksignModal}
         onConfirm={handleClicksignConfirm}
         onCancel={handleClicksignCancel}
@@ -804,6 +823,13 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
 
 
 
+      {/* Contract Detail Modal */}
+      <ContractDetailModal
+        contract={selectedContract}
+        onClose={() => setSelectedContract(null)}
+        role="client"
+      />
+
       {/* Feedback Modal */}
       <FeedbackModal
         data={feedbackModal}
@@ -840,56 +866,7 @@ const ContractSuccessModal = ({ isOpen, onClose }: any) => {
   );
 };
 
-const ClicksignConfirmModal = ({ isOpen, onConfirm, onCancel, loading }: { isOpen: boolean; onConfirm: () => void; onCancel: () => void; loading: boolean }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#002B49]/40 backdrop-blur-sm">
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full text-center space-y-6 shadow-2xl relative"
-      >
-        {/* Icon */}
-        <div className="w-20 h-20 bg-[#E6F6F7] rounded-full flex items-center justify-center mx-auto ring-8 ring-[#E6F6F7]/50">
-          <Send className="text-[#00A3B1]" size={36} />
-        </div>
 
-        {/* Text */}
-        <div className="space-y-3">
-          <h3 className="text-xl font-bold text-[#002B49]">Deseja realmente enviar este contrato?</h3>
-          <p className="text-sm text-slate-400 font-medium leading-relaxed">
-            Ao confirmar, o contrato será enviado para a assinatura digital. Deseja prosseguir?
-          </p>
-        </div>
-
-        {/* Buttons */}
-        <div className="space-y-3 pt-2">
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="w-full py-4 bg-[#00A3B1] hover:bg-[#008c99] text-white font-bold rounded-xl shadow-lg shadow-[#00A3B1]/20 transition-all active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <RotateCcw size={18} className="animate-spin" />
-                Enviando...
-              </>
-            ) : (
-              'Confirmar Contrato'
-            )}
-          </button>
-          <button
-            onClick={onCancel}
-            disabled={loading}
-            className="w-full py-4 bg-white border-2 border-slate-200 hover:border-slate-300 text-[#002B49] font-bold rounded-xl transition-all active:scale-[0.98] disabled:opacity-40"
-          >
-            Cancelar
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
 
 /** Styled feedback modal replacing native alert() */
 const FeedbackModal = ({ data, onClose }: { data: { type: 'success' | 'error' | 'warning'; title: string; message: string } | null; onClose: () => void }) => {
