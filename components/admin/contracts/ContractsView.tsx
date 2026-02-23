@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Home, ChevronRight, Search, Trash2, Edit2, ArrowUpDown, Eye, RotateCcw } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Plus, Home, ChevronRight, Search, Trash2, Edit2, ArrowUpDown, Eye, RotateCcw, X, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ContractForm from './ContractForm';
 import ContractDetailModal from '../../shared/ContractDetailModal';
 import ContractStatusBadge from '../../shared/ui/ContractStatusBadge';
@@ -16,6 +16,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
     const [viewMode, setViewMode] = useState<'list' | 'create' | 'edit'>('list');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [selectedContract, setSelectedContract] = useState<any>(null);
+    const [feedbackModal, setFeedbackModal] = useState<{ type: 'success' | 'error' | 'warning'; title: string; message: string } | null>(null);
     // Filter States
     const [filterClient, setFilterClient] = useState('');
     const [filterConsultor, setFilterConsultor] = useState('');
@@ -120,13 +121,13 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
             });
             if (res.ok) {
                 fetchContracts();
-                alert('Contrato excluído com sucesso!');
+                setFeedbackModal({ type: 'success', title: 'Contrato excluído', message: 'O contrato foi excluído com sucesso.' });
             } else {
-                alert('Erro ao excluir contrato.');
+                setFeedbackModal({ type: 'error', title: 'Erro', message: 'Não foi possível excluir o contrato.' });
             }
         } catch (error) {
             console.error(error);
-            alert('Erro ao excluir contrato.');
+            setFeedbackModal({ type: 'error', title: 'Erro', message: 'Não foi possível excluir o contrato.' });
         }
     };
 
@@ -278,21 +279,21 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                 });
 
                 if (clicksignRes.ok) {
-                    alert('Contrato criado e enviado para assinatura com sucesso!');
+                    setFeedbackModal({ type: 'success', title: 'Contrato enviado!', message: 'O contrato foi criado e enviado para assinatura digital com sucesso. Os signatários receberão um e-mail com o link para assinar.' });
                 } else {
                     console.error("Falha ao enviar clicksign");
-                    alert('Contrato criado, mas houve uma falha ao enviar para assinatura.');
+                    setFeedbackModal({ type: 'warning', title: 'Contrato criado', message: 'O contrato foi criado, mas houve uma falha ao enviar para a assinatura digital. Tente reenviar manualmente.' });
                 }
             } catch (clickerr) {
                 console.error("Erro clicksign", clickerr);
-                alert('Contrato criado, mas houve um erro ao comunicar com a Clicksign.');
+                setFeedbackModal({ type: 'warning', title: 'Contrato criado', message: 'O contrato foi criado, mas houve um erro ao comunicar com a Clicksign. Tente reenviar manualmente.' });
             }
 
             setViewMode('list');
             fetchContracts();
         } catch (error: any) {
             console.error("Error creating contract:", error);
-            alert(`Erro ao criar contrato: ${error.message}`);
+            setFeedbackModal({ type: 'error', title: 'Erro ao criar contrato', message: error.message || 'Ocorreu um erro inesperado. Tente novamente.' });
         } finally {
             setSubmitting(false);
         }
@@ -517,14 +518,14 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                                         <div className="flex items-center justify-center gap-2">
                                             <button
                                                 onClick={() => setSelectedContract(c.fullData)}
-                                                className="text-slate-300 hover:text-cyan-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                className="text-slate-400 hover:text-cyan-600 transition-colors"
                                                 title="Ver contrato"
                                             >
                                                 <Eye size={16} />
                                             </button>
                                             <button
                                                 onClick={() => handleEdit(c.fullData?.id || c.id)}
-                                                className="text-slate-300 hover:text-cyan-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                className="text-slate-400 hover:text-cyan-600 transition-colors"
                                                 title="Editar"
                                             >
                                                 <Edit2 size={16} />
@@ -537,7 +538,7 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                                                             handleDelete(c.fullData?.id || c.id);
                                                         }}
                                                         title="Excluir contrato"
-                                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                        className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                     >
                                                         <Trash2 size={16} />
                                                     </button>
@@ -564,7 +565,57 @@ const ContractsView = ({ userProfile }: { userProfile?: any }) => {
                     onClose={() => setSelectedContract(null)}
                 />
             )}
+
+            {/* Feedback Modal */}
+            <FeedbackModal
+                data={feedbackModal}
+                onClose={() => setFeedbackModal(null)}
+            />
         </div>
+    );
+};
+
+/** Styled feedback modal replacing native alert() */
+const FeedbackModal = ({ data, onClose }: { data: { type: 'success' | 'error' | 'warning'; title: string; message: string } | null; onClose: () => void }) => {
+    if (!data) return null;
+
+    const config = {
+        success: { icon: CheckCircle2, bg: 'bg-emerald-50', ring: 'ring-emerald-100', iconColor: 'text-emerald-500', btnBg: 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/25' },
+        error: { icon: XCircle, bg: 'bg-red-50', ring: 'ring-red-100', iconColor: 'text-red-500', btnBg: 'bg-red-500 hover:bg-red-600 shadow-red-500/25' },
+        warning: { icon: AlertTriangle, bg: 'bg-amber-50', ring: 'ring-amber-100', iconColor: 'text-amber-500', btnBg: 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/25' },
+    }[data.type];
+
+    const Icon = config.icon;
+
+    return (
+        <AnimatePresence>
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                <motion.div
+                    initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                    transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                    className="bg-white rounded-2xl p-8 max-w-sm w-full text-center space-y-6 shadow-2xl relative"
+                >
+                    <button onClick={onClose} className="absolute right-5 top-5 text-slate-300 hover:text-slate-500 transition-colors">
+                        <X size={18} />
+                    </button>
+                    <div className={`w-16 h-16 ${config.bg} rounded-full flex items-center justify-center mx-auto ring-8 ${config.ring}`}>
+                        <Icon className={config.iconColor} size={32} />
+                    </div>
+                    <div className="space-y-2">
+                        <h3 className="text-lg font-bold text-[#002B49]">{data.title}</h3>
+                        <p className="text-sm text-slate-500 leading-relaxed">{data.message}</p>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className={`w-full py-3.5 text-white font-bold rounded-xl shadow-lg transition-all active:scale-[0.98] ${config.btnBg}`}
+                    >
+                        Fechar
+                    </button>
+                </motion.div>
+            </div>
+        </AnimatePresence>
     );
 };
 

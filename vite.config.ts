@@ -10,6 +10,12 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       // Enable SPA fallback — all routes serve index.html
       historyApiFallback: true,
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:3333',
+          changeOrigin: true
+        }
+      }
     },
     plugins: [react()],
     define: {

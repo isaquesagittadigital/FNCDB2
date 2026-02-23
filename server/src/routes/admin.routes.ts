@@ -307,6 +307,23 @@ export async function adminRoutes(server: FastifyInstance) {
         }
     });
 
+    // 7c. Get User Onboarding/KYC Data (validation_token, ip_address, declarations_accepted_at, suitability, compliance, etc.)
+    server.get('/clients/:id/onboarding', async (request: any, reply) => {
+        const { id } = request.params;
+        try {
+            const { data, error } = await supabase
+                .from('user_onboarding')
+                .select('*')
+                .eq('user_id', id)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
+            return reply.send(data || {});
+        } catch (err: any) {
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
 
     // Contracts Management
     // 8. list contracts
@@ -1675,7 +1692,7 @@ export async function adminRoutes(server: FastifyInstance) {
                             title: 'Comprovante anexado',
                             description: 'Verificar se o consultor assinou o contrato de prestação de serviços',
                             status: c.aprovacao_comprovante || 'pending',
-                            hasDocument: !!c.comprovante_url
+                            hasDocument: true
                         },
                         {
                             id: `${c.id}-perfil`,
@@ -1764,7 +1781,7 @@ export async function adminRoutes(server: FastifyInstance) {
                         title: 'Comprovante anexado',
                         description: 'Verificar se o consultor assinou o contrato de prestação de serviços',
                         status: contract.aprovacao_comprovante || 'pending',
-                        hasDocument: !!contract.comprovante_url
+                        hasDocument: true
                     },
                     {
                         id: `${contract.id}-perfil`,

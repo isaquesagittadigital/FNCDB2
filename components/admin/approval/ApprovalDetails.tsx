@@ -17,6 +17,7 @@ interface ApprovalDetailsProps {
 
 const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ process, onBack, onUpdateStepStatus, onFinalizeProcess }) => {
     const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+    const [selectedStepType, setSelectedStepType] = useState<string | null>(null);
     const [stepToReject, setStepToReject] = useState<string | null>(null);
     const [showFinalConfirmation, setShowFinalConfirmation] = useState(false);
     const [showFinalRejection, setShowFinalRejection] = useState(false);
@@ -28,6 +29,10 @@ const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ process, onBack, onUp
         if (step.id.endsWith('-perfil')) {
             setShowInvestorProfile(true);
         } else {
+            // Extract step type from the step id (e.g., 'uuid-assinatura' -> 'assinatura')
+            const parts = step.id.split('-');
+            const type = parts[parts.length - 1];
+            setSelectedStepType(type);
             setSelectedDocument(step.title);
         }
     };
@@ -132,8 +137,12 @@ const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ process, onBack, onUp
 
             <DocumentViewerModal
                 isOpen={!!selectedDocument}
-                onClose={() => setSelectedDocument(null)}
+                onClose={() => { setSelectedDocument(null); setSelectedStepType(null); }}
                 documentTitle={selectedDocument || ''}
+                contractId={process.id}
+                stepType={selectedStepType || undefined}
+                clicksignEnvelopeId={process.clicksign_envelope_id}
+                comprovanteUrl={process.comprovante_url}
             />
 
             <RejectionModal

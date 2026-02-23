@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, MapPin, CreditCard, Calendar, Shield } from 'lucide-react';
+import { X, FileText, Loader2, Printer } from 'lucide-react';
+import KYCDocumentContent from '../../../shared/KYCDocumentContent';
 
 interface InvestorProfileModalProps {
     isOpen: boolean;
@@ -9,18 +10,24 @@ interface InvestorProfileModalProps {
 
 const InvestorProfileModal: React.FC<InvestorProfileModalProps> = ({ isOpen, onClose, clientId }) => {
     const [profile, setProfile] = useState<any>(null);
+    const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+    const [onboardingData, setOnboardingData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333/api';
+    const API_URL = import.meta.env.VITE_API_URL || '/api';
 
     useEffect(() => {
         if (isOpen && clientId) {
-            fetchProfile();
+            setLoading(true);
+            Promise.all([
+                fetchProfile(),
+                fetchBankAccounts(),
+                fetchOnboarding()
+            ]).finally(() => setLoading(false));
         }
     }, [isOpen, clientId]);
 
     const fetchProfile = async () => {
-        setLoading(true);
         try {
             const res = await fetch(`${API_URL}/admin/clients/${clientId}`);
             if (!res.ok) throw new Error('Falha ao buscar perfil');
@@ -28,120 +35,142 @@ const InvestorProfileModal: React.FC<InvestorProfileModalProps> = ({ isOpen, onC
             setProfile(data);
         } catch (err) {
             console.error('Error fetching profile:', err);
-        } finally {
-            setLoading(false);
         }
+    };
+
+    const fetchBankAccounts = async () => {
+        try {
+            const res = await fetch(`${API_URL}/admin/clients/${clientId}/bank-accounts`);
+            if (res.ok) {
+                const data = await res.json();
+                setBankAccounts(data || []);
+            }
+        } catch (err) {
+            console.error('Error fetching bank accounts:', err);
+        }
+    };
+
+    const fetchOnboarding = async () => {
+        try {
+            const res = await fetch(`${API_URL}/admin/clients/${clientId}/onboarding`);
+            if (res.ok) {
+                const data = await res.json();
+                setOnboardingData(data);
+            }
+        } catch (err) {
+            console.error('Error fetching onboarding data:', err);
+        }
+    };
+
+    const handlePrint = () => {
+        const printContent = document.getElementById('kyc-document-content');
+        if (!printContent) return;
+
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        printWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Formulário do Investidor - ${profile?.nome_fantasia || profile?.razao_social || 'KYC'}</title>
+                <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+                <style>
+                    body { font-family: 'Times New Roman', Times, serif; padding: 40px; }
+                    @media print { body { padding: 20px; } }
+                </style>
+            </head>
+            <body>
+                ${printContent.innerHTML}
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+        }, 500);
     };
 
     if (!isOpen) return null;
 
-    const InfoRow = ({ label, value, icon: Icon }: { label: string; value?: string; icon?: any }) => (
-        <div className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
-            {Icon && <Icon className="w-4 h-4 text-[#009ca6] mt-0.5 flex-shrink-0" />}
-            <div className="min-w-0">
-                <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">{label}</p>
-                <p className="text-sm text-slate-800 font-medium mt-0.5">{value || '—'}</p>
-            </div>
-        </div>
-    );
+    // Merge all data exactly like DocumentsView.tsx does for the client flow:
+    // 1. Start with usuarios data (profile)
+    // 2. Map address fields (DB uses _end suffix, KYCDocumentContent expects without)
+    // 3. Overlay onboarding KYC data (validation_token, ip_address, declarations_accepted_at, suitability, compliance)
+    // 4. Parse JSON arrays if stored as strings
+    // 5. Add bank data at top level
+    const enrichedData = profile ? {
+        ...profile,
+        // Map address fields from the DB naming convention
+        logradouro: profile.logradouro_end || profile.logradouro || profile.endereco,
+        numero: profile.numero_end || profile.numero,
+        complemento: profile.complemento_end || profile.complemento,
+        // Merge onboarding KYC data (includes validation_token, ip_address, declarations_accepted_at)
+        ...onboardingData,
+        // Parse JSON arrays if stored as strings
+        resource_origin: typeof onboardingData?.resource_origin === 'string'
+            ? JSON.parse(onboardingData.resource_origin)
+            : (onboardingData?.resource_origin || []),
+        experience_areas: typeof onboardingData?.experience_areas === 'string'
+            ? JSON.parse(onboardingData.experience_areas)
+            : (onboardingData?.experience_areas || []),
+        // Bank account data from the separate table
+        ...(bankAccounts.length > 0 ? {
+            banco: bankAccounts[0].banco,
+            agencia: bankAccounts[0].agencia,
+            conta: bankAccounts[0].conta,
+        } : {}),
+    } : null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
                 {/* Header */}
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-[#002B49] to-[#003d66]">
+                <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-[#002B49] flex-shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                            <User className="w-5 h-5 text-white" />
+                        <div className="w-9 h-9 bg-white/20 rounded-lg flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-white" />
                         </div>
                         <div>
-                            <h3 className="text-lg font-semibold text-white">Perfil do Investidor</h3>
-                            <p className="text-sm text-white/70">Dados cadastrais do onboarding</p>
+                            <h3 className="text-lg font-bold text-white">Formulário do Investidor (KYC)</h3>
+                            <p className="text-xs text-white/60">
+                                {profile?.nome_fantasia || profile?.razao_social || 'Carregando...'}
+                            </p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="text-white/70 hover:text-white transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {profile && (
+                            <button
+                                onClick={handlePrint}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-white/15 hover:bg-white/25 text-white rounded-lg transition-colors text-sm font-medium"
+                                title="Imprimir documento"
+                            >
+                                <Printer className="w-4 h-4" />
+                                Imprimir
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-white/70 hover:text-white transition-colors p-1.5 hover:bg-white/10 rounded-lg">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
-                {/* Content */}
-                <div className="p-6 overflow-y-auto max-h-[65vh]">
+                {/* Content - Full KYC Document */}
+                <div className="flex-1 overflow-y-auto">
                     {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <div className="w-8 h-8 border-4 border-[#009ca6] border-t-transparent rounded-full animate-spin" />
+                        <div className="flex flex-col items-center justify-center py-24 gap-3">
+                            <Loader2 className="w-8 h-8 text-[#009ca6] animate-spin" />
+                            <p className="text-sm text-slate-400">Carregando dados do investidor...</p>
                         </div>
-                    ) : profile ? (
-                        <div className="space-y-6">
-                            {/* Personal Info */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-[#002B49] mb-3 flex items-center gap-2">
-                                    <User className="w-4 h-4" /> Dados Pessoais
-                                </h4>
-                                <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                                    <InfoRow label="Nome" value={profile.nome_fantasia || profile.nome_completo} icon={User} />
-                                    <InfoRow label="CPF" value={profile.cpf} icon={CreditCard} />
-                                    <InfoRow label="RG" value={profile.rg ? `${profile.rg} - ${profile.orgao_emissor || ''} ${profile.uf_rg || ''}` : undefined} />
-                                    <InfoRow label="Data de Nascimento" value={profile.data_nascimento ? new Date(profile.data_nascimento).toLocaleDateString('pt-BR') : undefined} icon={Calendar} />
-                                    <InfoRow label="Sexo" value={profile.sexo} />
-                                    <InfoRow label="Nacionalidade" value={profile.nacionalidade} />
-                                    <InfoRow label="Estado Civil" value={profile.estado_civil} />
-                                    <InfoRow label="Profissão" value={profile.profissao} />
-                                </div>
-                            </div>
-
-                            {/* Contact Info */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-[#002B49] mb-3 flex items-center gap-2">
-                                    <Mail className="w-4 h-4" /> Contato
-                                </h4>
-                                <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                                    <InfoRow label="Email" value={profile.email} icon={Mail} />
-                                    <InfoRow label="Celular" value={profile.celular} icon={Phone} />
-                                </div>
-                            </div>
-
-                            {/* Address */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-[#002B49] mb-3 flex items-center gap-2">
-                                    <MapPin className="w-4 h-4" /> Endereço
-                                </h4>
-                                <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                                    <InfoRow label="CEP" value={profile.cep} icon={MapPin} />
-                                    <InfoRow label="Endereço" value={profile.endereco ? `${profile.endereco}, ${profile.numero || 'S/N'} ${profile.complemento || ''}` : undefined} />
-                                    <InfoRow label="Bairro" value={profile.bairro} />
-                                    <InfoRow label="Cidade/UF" value={profile.cidade ? `${profile.cidade} - ${profile.estado}` : undefined} />
-                                </div>
-                            </div>
-
-                            {/* Banking Info */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-[#002B49] mb-3 flex items-center gap-2">
-                                    <CreditCard className="w-4 h-4" /> Dados Bancários
-                                </h4>
-                                <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                                    <InfoRow label="Banco" value={profile.banco} icon={CreditCard} />
-                                    <InfoRow label="Agência" value={profile.agencia} />
-                                    <InfoRow label="Conta" value={profile.conta} />
-                                    <InfoRow label="Tipo de Conta" value={profile.tipo_conta} />
-                                    <InfoRow label="Chave PIX" value={profile.chave_pix} />
-                                </div>
-                            </div>
-
-                            {/* KYC / Compliance */}
-                            <div>
-                                <h4 className="text-sm font-semibold text-[#002B49] mb-3 flex items-center gap-2">
-                                    <Shield className="w-4 h-4" /> Compliance
-                                </h4>
-                                <div className="bg-slate-50 rounded-xl p-4 space-y-1">
-                                    <InfoRow label="PEP" value={profile.pep === true ? 'Sim' : profile.pep === false ? 'Não' : '—'} icon={Shield} />
-                                    <InfoRow label="US Person" value={profile.us_person === true ? 'Sim' : profile.us_person === false ? 'Não' : '—'} />
-                                    <InfoRow label="Suitability" value={profile.perfil_investidor || profile.suitability} />
-                                </div>
-                            </div>
+                    ) : enrichedData ? (
+                        <div id="kyc-document-content" className="px-8 py-6">
+                            <KYCDocumentContent data={enrichedData} />
                         </div>
                     ) : (
-                        <div className="text-center py-12 text-slate-400">
-                            Nenhum dado encontrado para este cliente.
+                        <div className="text-center py-20 text-slate-400">
+                            <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                            <p className="text-sm">Nenhum dado encontrado para este cliente.</p>
                         </div>
                     )}
                 </div>
