@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calculator, Calendar, User, DollarSign, Percent, Clock, ChevronRight, Download, Printer, ArrowLeft } from 'lucide-react';
+import { Calculator, Calendar, User, DollarSign, Percent, Clock, ChevronRight, Download, Printer, ArrowLeft, MessageSquare, Mail, Send } from 'lucide-react';
 import { LogoFull } from '../shared/ui/Logo';
 import { supabase } from '../../lib/supabase';
 
@@ -19,7 +19,23 @@ interface Consultant {
     razao_social: string;
 }
 
-const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
+interface SimulatorViewProps {
+    onBack?: () => void;
+    userProfile?: any;
+    mode?: 'simulate' | 'create';
+    onSubmit?: (data: {
+        clientId: string;
+        amount: number;
+        rate: number;
+        period: number;
+        startDate: string;
+        paymentDay: number;
+        sendMethod: string;
+    }, simulationRows: SimulationRow[]) => void;
+    isSubmitting?: boolean;
+}
+
+const SimulatorView: React.FC<SimulatorViewProps> = ({ onBack, userProfile, mode = 'simulate', onSubmit, isSubmitting = false }) => {
     // Add CSS to hide spin buttons
     useEffect(() => {
         const style = document.createElement('style');
@@ -64,6 +80,24 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
     const [showConsultantDropdown, setShowConsultantDropdown] = useState(false);
     const [consultantSearch, setConsultantSearch] = useState('');
 
+    // Client search state (for 'create' mode)
+    const [clientes, setClientes] = useState<any[]>([]);
+    const [isLoadingClientes, setIsLoadingClientes] = useState(false);
+    const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+    const [clienteSearch, setClienteSearch] = useState('');
+    const [selectedClienteId, setSelectedClienteId] = useState('');
+    const [sendMethod, setSendMethod] = useState('Whatsapp');
+
+    const isConsultor = userProfile?.tipo_user === 'Consultor';
+
+    useEffect(() => {
+        if (isConsultor && userProfile) {
+            const nomeConsultor = userProfile.nome_fantasia || userProfile.razao_social || userProfile.nome;
+            setConsultor(nomeConsultor);
+            setConsultantSearch(nomeConsultor);
+        }
+    }, [isConsultor, userProfile]);
+
     useEffect(() => {
         const fetchConsultants = async () => {
             setIsLoadingConsultants(true);
@@ -84,7 +118,33 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
         };
 
         fetchConsultants();
-    }, []);
+
+        const fetchClientes = async () => {
+            if (mode !== 'create') return;
+            setIsLoadingClientes(true);
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?limit=500`);
+                if (!response.ok) throw new Error('Falha ao buscar clientes');
+                const { data } = await response.json();
+
+                const mapped = (Array.isArray(data) ? data : []).map((c: any) => ({
+                    ...c,
+                    nome_completo: c.nome_fantasia || c.razao_social || c.nome || c.email || 'Sem nome'
+                }));
+                // If Consultant, filter to their clients only? For now backend might filter it.
+                // Assuming backend /admin/clients returns all for admin, and consultant's clients for consultor.
+                // Actually the consultant endpoint is usually /consultor/clients or similar, but /admin/clients works if it has RLS.
+                // Reusing the same fetch from ContractsView.tsx
+                setClientes(mapped);
+            } catch (err) {
+                console.error('Error fetching clients:', err);
+            } finally {
+                setIsLoadingClientes(false);
+            }
+        };
+
+        if (mode === 'create') fetchClientes();
+    }, [mode]);
 
     const filteredConsultants = useMemo(() => {
         if (!consultantSearch) return [];
@@ -93,6 +153,16 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             (c.razao_social || '').toLowerCase().includes(consultantSearch.toLowerCase())
         );
     }, [consultants, consultantSearch]);
+
+    const filteredClientes = useMemo(() => {
+        if (!clienteSearch) return [];
+        return clientes.filter(c =>
+            (c.nome_completo || '').toLowerCase().includes(clienteSearch.toLowerCase()) ||
+            (c.email || '').toLowerCase().includes(clienteSearch.toLowerCase()) ||
+            (c.cpf || '').includes(clienteSearch) ||
+            (c.cnpj || '').includes(clienteSearch)
+        );
+    }, [clientes, clienteSearch]);
 
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -142,19 +212,49 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
             lastPaymentDate = nextPayment;
         }
 
-        // 3. Last parcel (Pro-rata until end of contract)
+        // 3. Last parcel calculations
         if (months > 1) {
             const endDate = new Date(start.getFullYear(), start.getMonth() + months, start.getDate());
-            const timeDiffEnd = endDate.getTime() - lastPaymentDate.getTime();
-            const daysLastParcel = Math.ceil(timeDiffEnd / (1000 * 3600 * 24));
 
-            rows.push({
-                parcela: months,
-                diasProRata: daysLastParcel,
-                valorDividendo: daysLastParcel * dailyRate,
-                dataPagamento: formatDate(endDate),
-                tipo: 'Dividendo'
-            });
+            // Check if we need a regular payment on the 10th of the final month
+            const paymentDayOnLastMonth = new Date(endDate.getFullYear(), endDate.getMonth(), diaPagamento);
+            let finalProRataStart = lastPaymentDate;
+
+            // If the endDate is after the 10th, and the 10th is after the last payment date
+            if (endDate.getDate() > diaPagamento && paymentDayOnLastMonth > lastPaymentDate) {
+                // Add regular full-month payment for the 10th of the last month
+                rows.push({
+                    parcela: months,
+                    diasProRata: 0,
+                    valorDividendo: 30 * dailyRate,
+                    dataPagamento: formatDate(paymentDayOnLastMonth),
+                    tipo: 'Dividendo'
+                });
+                finalProRataStart = paymentDayOnLastMonth;
+                // And then the final proportional fragment after the 10th
+                const timeDiffEnd = endDate.getTime() - paymentDayOnLastMonth.getTime();
+                const daysLastParcel = Math.ceil(timeDiffEnd / (1000 * 3600 * 24));
+
+                rows.push({
+                    parcela: months + 1,
+                    diasProRata: daysLastParcel,
+                    valorDividendo: daysLastParcel * dailyRate,
+                    dataPagamento: formatDate(endDate),
+                    tipo: 'Dividendo'
+                });
+            } else {
+                // End date is before or exactly on the 10th, so just calculate pro-rata from the previous payment date
+                const timeDiffEnd = endDate.getTime() - lastPaymentDate.getTime();
+                const daysLastParcel = Math.ceil(timeDiffEnd / (1000 * 3600 * 24));
+
+                rows.push({
+                    parcela: months,
+                    diasProRata: daysLastParcel,
+                    valorDividendo: daysLastParcel * dailyRate,
+                    dataPagamento: formatDate(endDate),
+                    tipo: 'Dividendo'
+                });
+            }
 
             // 4. Return of capital
             rows.push({
@@ -177,11 +277,23 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
     return (
         <div className="min-h-screen bg-[#F8FAFB] pb-20">
             {/* Header / Logo */}
-            <div className="flex justify-center py-10">
+            <div className={`flex items-center justify-between py-6 px-4 pt-10 mx-auto ${mode === 'create' ? 'max-w-7xl' : 'max-w-4xl'}`}>
+                {onBack ? (
+                    <button
+                        onClick={onBack}
+                        className="p-2 -ml-2 rounded-xl hover:bg-slate-200/50 text-slate-500 transition-colors flex items-center gap-2"
+                    >
+                        <ArrowLeft size={20} />
+                        <span className="text-sm font-medium hidden sm:inline">Voltar</span>
+                    </button>
+                ) : (
+                    <div className="w-[84px]"></div>
+                )}
                 <LogoFull dark={true} className="h-10" />
+                <div className="w-[84px]"></div>
             </div>
 
-            <div className="max-w-4xl mx-auto px-4 pt-4">
+            <div className={`mx-auto px-4 pt-4 ${mode === 'create' ? 'max-w-7xl' : 'max-w-4xl'}`}>
 
                 {/* Wizard Dividendos Card */}
                 <motion.div
@@ -195,7 +307,68 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                             Simule aportes, calcule dividendos e visualize o cronograma completo de pagamentos de forma rápida e intuitiva.
                         </p>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-6">
+                        <div className={`grid grid-cols-1 gap-x-6 gap-y-6 ${mode === 'create' ? 'md:grid-cols-1' : (isConsultor ? '' : 'md:grid-cols-2')}`}>
+                            {mode === 'create' && (
+                                <div className="space-y-2">
+                                    <label className="text-[14px] font-medium text-slate-700 flex items-center">
+                                        Cliente <span className="text-[#009BB6] ml-1">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                            <User size={20} className="text-[#009BB6]" />
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={clienteSearch}
+                                            onChange={(e) => {
+                                                setClienteSearch(e.target.value);
+                                                setShowClienteDropdown(true);
+                                                setSelectedClienteId('');
+                                            }}
+                                            onFocus={() => setShowClienteDropdown(true)}
+                                            className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#009BB6]/10 focus:border-[#009BB6] text-slate-700 bg-white transition-all shadow-sm"
+                                            placeholder="Digite o nome, email ou CPF para buscar..."
+                                        />
+                                        {isLoadingClientes && (
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                                <div className="w-4 h-4 border-2 border-[#009BB6] border-t-transparent rounded-full animate-spin"></div>
+                                            </div>
+                                        )}
+                                        {showClienteDropdown && (clienteSearch || filteredClientes.length > 0) && (
+                                            <>
+                                                <div className="fixed inset-0 z-10" onClick={() => setShowClienteDropdown(false)}></div>
+                                                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl border border-slate-100 shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto w-full">
+                                                    {filteredClientes.length > 0 ? (
+                                                        filteredClientes.map(c => (
+                                                            <button
+                                                                key={c.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setClienteSearch(c.nome_completo);
+                                                                    setSelectedClienteId(c.id);
+                                                                    setShowClienteDropdown(false);
+                                                                }}
+                                                                className="w-full px-5 py-3 text-left hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
+                                                            >
+                                                                <span className="font-bold text-[#002B49] text-sm">{c.nome_completo}</span>
+                                                                <span className="text-[10px] text-slate-400 font-medium">CPF/CNPJ: {c.cpf || c.cnpj || '--'} • Email: {c.email || '--'}</span>
+                                                            </button>
+                                                        ))
+                                                    ) : (
+                                                        <div className="px-5 py-4 text-center text-slate-400 text-sm">
+                                                            Nenhum cliente encontrado
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                    {clientes.length === 0 && !isLoadingClientes && (
+                                        <p className="text-[11px] font-bold text-red-500 pt-1 mt-1">Caro consultor, cadastre um cliente para que seja possível criar os contratos.</p>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Row 1 */}
                             <div className="space-y-2">
                                 <label className="text-[14px] font-medium text-slate-700 flex items-center">
@@ -212,62 +385,64 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-[14px] font-medium text-slate-700 flex items-center">
-                                    Consultor <span className="text-[#009BB6] ml-1">*</span>
-                                </label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        value={consultantSearch}
-                                        onChange={(e) => {
-                                            setConsultantSearch(e.target.value);
-                                            setShowConsultantDropdown(true);
-                                            if (!e.target.value) setConsultor('');
-                                        }}
-                                        onFocus={() => setShowConsultantDropdown(true)}
-                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#009BB6]/10 focus:border-[#009BB6] text-slate-700 bg-white transition-all"
-                                        placeholder="Selecione o consultor"
-                                    />
-                                    {isLoadingConsultants && (
-                                        <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                                            <div className="w-4 h-4 border-2 border-[#009BB6] border-t-transparent rounded-full animate-spin"></div>
-                                        </div>
-                                    )}
-
-                                    {showConsultantDropdown && (consultantSearch || filteredConsultants.length > 0) && (
-                                        <>
-                                            <div
-                                                className="fixed inset-0 z-10"
-                                                onClick={() => setShowConsultantDropdown(false)}
-                                            ></div>
-                                            <div className="absolute left-0 right-0 mt-2 bg-white rounded-xl border border-slate-100 shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto">
-                                                {filteredConsultants.length > 0 ? (
-                                                    filteredConsultants.map((c) => (
-                                                        <button
-                                                            key={c.id}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setConsultor(c.nome_fantasia || c.razao_social);
-                                                                setConsultantSearch(c.nome_fantasia || c.razao_social);
-                                                                setShowConsultantDropdown(false);
-                                                            }}
-                                                            className="w-full px-5 py-3 text-left hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
-                                                        >
-                                                            <span className="font-bold text-[#002B49] text-sm">{c.nome_fantasia}</span>
-                                                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">{c.razao_social}</span>
-                                                        </button>
-                                                    ))
-                                                ) : (
-                                                    <div className="px-5 py-4 text-center text-slate-400 text-sm italic">
-                                                        Nenhum consultor encontrado
-                                                    </div>
-                                                )}
+                            {(!isConsultor && mode === 'simulate') && (
+                                <div className="space-y-2">
+                                    <label className="text-[14px] font-medium text-slate-700 flex items-center">
+                                        Consultor <span className="text-[#009BB6] ml-1">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={consultantSearch}
+                                            onChange={(e) => {
+                                                setConsultantSearch(e.target.value);
+                                                setShowConsultantDropdown(true);
+                                                if (!e.target.value) setConsultor('');
+                                            }}
+                                            onFocus={() => setShowConsultantDropdown(true)}
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#009BB6]/10 focus:border-[#009BB6] text-slate-700 bg-white transition-all"
+                                            placeholder="Selecione o consultor"
+                                        />
+                                        {isLoadingConsultants && (
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                                <div className="w-4 h-4 border-2 border-[#009BB6] border-t-transparent rounded-full animate-spin"></div>
                                             </div>
-                                        </>
-                                    )}
+                                        )}
+
+                                        {showConsultantDropdown && (consultantSearch || filteredConsultants.length > 0) && (
+                                            <>
+                                                <div
+                                                    className="fixed inset-0 z-10"
+                                                    onClick={() => setShowConsultantDropdown(false)}
+                                                ></div>
+                                                <div className="absolute left-0 right-0 mt-2 bg-white rounded-xl border border-slate-100 shadow-xl overflow-hidden z-20 max-h-60 overflow-y-auto">
+                                                    {filteredConsultants.length > 0 ? (
+                                                        filteredConsultants.map((c) => (
+                                                            <button
+                                                                key={c.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setConsultor(c.nome_fantasia || c.razao_social);
+                                                                    setConsultantSearch(c.nome_fantasia || c.razao_social);
+                                                                    setShowConsultantDropdown(false);
+                                                                }}
+                                                                className="w-full px-5 py-3 text-left hover:bg-slate-50 transition-colors flex flex-col gap-0.5"
+                                                            >
+                                                                <span className="font-bold text-[#002B49] text-sm">{c.nome_fantasia}</span>
+                                                                <span className="text-[10px] text-slate-400 uppercase tracking-wider">{c.razao_social}</span>
+                                                            </button>
+                                                        ))
+                                                    ) : (
+                                                        <div className="px-5 py-4 text-center text-slate-400 text-sm italic">
+                                                            Nenhum consultor encontrado
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         {/* Row 2: Aporte, Rentabilidade, Período */}
@@ -462,6 +637,72 @@ const SimulatorView: React.FC<{ onBack?: () => void }> = ({ onBack }) => {
                         </motion.div>
                     )}
                 </AnimatePresence>
+
+                {mode === 'create' && simulationData.rows.length > 0 && (
+                    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden mb-12 p-8">
+                        <div className="space-y-4 mb-8">
+                            <label className="text-[14px] font-bold text-[#002B49] tracking-wide">Preferência de envio de link de assinatura</label>
+                            <div className="flex gap-4 p-1 bg-[#F8FAFB] w-fit rounded-xl border border-slate-100">
+                                {['Whatsapp', 'Email', 'SMS'].map((method) => (
+                                    <button
+                                        key={method}
+                                        onClick={() => setSendMethod(method)}
+                                        className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${sendMethod === method
+                                            ? 'bg-white text-[#27C27B] shadow-sm border border-slate-100'
+                                            : 'text-slate-400 hover:text-[#002B49]'
+                                            }`}
+                                    >
+                                        {method === 'Whatsapp' && <MessageSquare size={18} />}
+                                        {method === 'Email' && <Mail size={18} />}
+                                        {method === 'SMS' && <Send size={18} />}
+                                        {method}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            {onBack && (
+                                <button
+                                    onClick={onBack}
+                                    disabled={isSubmitting}
+                                    className="px-6 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                            )}
+                            <button
+                                disabled={!selectedClienteId || !dataAporte || !aporte || !rentabilidade || !periodo || isSubmitting}
+                                onClick={() => {
+                                    if (onSubmit && selectedClienteId && dataAporte && aporte && rentabilidade && periodo) {
+                                        onSubmit({
+                                            clientId: selectedClienteId,
+                                            amount: Number(aporte),
+                                            rate: Number(rentabilidade),
+                                            period: Number(periodo),
+                                            startDate: dataAporte,
+                                            paymentDay: diaPagamento,
+                                            sendMethod
+                                        }, simulationData.rows);
+                                    }
+                                }}
+                                className="bg-[#009BB6] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#008299] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#009BB6]/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span>Criando...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>Criar Contrato</span>
+                                        <ChevronRight size={18} />
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -21,7 +21,7 @@ import ApprovalsView from './ApprovalsView';
 import ClientsView from './ClientsView';
 import ContractsView from './ContractsView';
 import InvoicesView from './InvoicesView';
-import Simulator from '../admin/simulator/Simulator';
+import SimulatorRedirectView from '../simulator/SimulatorRedirectView';
 
 import CalendarView from '../shared/CalendarView';
 import NotificationsView from '../shared/NotificationsView';
@@ -55,7 +55,7 @@ const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile, 
     const renderContent = () => {
         switch (activeTab) {
             case 'dashboard': return <ConsultantDashboard userProfile={userProfile} />;
-            case 'simulator': return <Simulator onOpen={onOpenSimulator} />;
+            case 'simulator': return <SimulatorRedirectView />;
             case 'approval': return <ApprovalsView />;
             case 'clients': return <ClientsView userProfile={userProfile} />;
             case 'contracts': return <ContractsView userProfile={userProfile} />;

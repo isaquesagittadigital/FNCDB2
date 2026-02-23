@@ -16,7 +16,7 @@ export async function authRoutes(server: FastifyInstance) {
             // This ensures the returned session tokens are compatible with the frontend anon key client
             const { createClient } = await import('@supabase/supabase-js');
             const supabaseUrl = process.env.SUPABASE_URL!;
-            const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY!;
+            const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
             const scopedSupabase = createClient(supabaseUrl, supabaseAnonKey, {
                 auth: {

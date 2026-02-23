@@ -13,8 +13,7 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
   const [isInvestorFormOpen, setIsInvestorFormOpen] = useState(false);
   const [isContractDetailsOpen, setIsContractDetailsOpen] = useState(false);
   const [selectedContract, setSelectedContract] = useState<any>(null);
-  const [emProcessoContracts, setEmProcessoContracts] = useState<any[]>([]);
-  const [assinandoContracts, setAssinandoContracts] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<any[]>([]);
   const [fullUserData, setFullUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -73,20 +72,11 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
           setFullUserData(mergedData);
 
 
-          // Fetch "Em processo" contracts
-          const { data: emProcessoData } = await supabase
+          // Fetch all contracts
+          const { data: contractsData } = await supabase
             .from('contratos')
             .select('*')
             .eq('user_id', user.id)
-            .eq('status', 'Em processo')
-            .order('created_at', { ascending: false });
-
-          // Fetch "Assinando" contracts
-          const { data: assinandoData } = await supabase
-            .from('contratos')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('status', 'Assinando')
             .order('created_at', { ascending: false });
 
           const formatContract = (contract: any) => {
@@ -115,11 +105,8 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
             };
           };
 
-          if (emProcessoData) {
-            setEmProcessoContracts(emProcessoData.map(formatContract));
-          }
-          if (assinandoData) {
-            setAssinandoContracts(assinandoData.map(formatContract));
+          if (contractsData) {
+            setContracts(contractsData.map(formatContract));
           }
         }
       } catch (error) {
@@ -341,32 +328,18 @@ const DocumentsView: React.FC<DocumentsViewProps> = ({ userProfile }) => {
           </div>
         </div>
 
-        {/* 2. Contratos em processos */}
+        {/* 2. Todos os Contratos */}
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <ClipboardList size={20} className="text-amber-500" />
-            <h2 className="text-lg sm:text-xl font-bold text-[#002B49]">Contratos em processos</h2>
-            {!loading && emProcessoContracts.length > 0 && (
-              <span className="px-3 py-1 bg-amber-50 text-amber-600 text-xs font-bold rounded-full">
-                {emProcessoContracts.length}
+            <ClipboardList size={20} className="text-[#00A3B1]" />
+            <h2 className="text-lg sm:text-xl font-bold text-[#002B49]">Contratos</h2>
+            {!loading && contracts.length > 0 && (
+              <span className="px-3 py-1 bg-[#E6F6F7] text-[#00A3B1] text-xs font-bold rounded-full">
+                {contracts.length}
               </span>
             )}
           </div>
-          {renderTable(emProcessoContracts, 'Nenhum contrato em processo no momento.')}
-        </div>
-
-        {/* 3. Assinaturas pendentes */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <PenTool size={20} className="text-violet-500" />
-            <h2 className="text-lg sm:text-xl font-bold text-[#002B49]">Assinaturas pendentes</h2>
-            {!loading && assinandoContracts.length > 0 && (
-              <span className="px-3 py-1 bg-violet-50 text-violet-600 text-xs font-bold rounded-full">
-                {assinandoContracts.length}
-              </span>
-            )}
-          </div>
-          {renderTable(assinandoContracts, 'Nenhuma assinatura pendente no momento.')}
+          {renderTable(contracts, 'Nenhum contrato cadastrado no momento.')}
         </div>
       </div>
 

@@ -1,43 +1,157 @@
-import React, { useState } from 'react';
-import { Search, ChevronDown, Eye } from 'lucide-react';
+
+import React, { useState, useEffect } from 'react';
+import { Search, ChevronDown, Eye, CheckCircle, CreditCard, Clock } from 'lucide-react';
 import InvoiceApprovalModal from './InvoiceApprovalModal';
+import { supabase } from '../../../lib/supabase';
+import { motion } from 'framer-motion';
+
+const MONTHS = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
 
 const InvoicesList: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
-
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isSaving, setIsSaving] = useState(false);
 
-    const [mockInvoices, setMockInvoices] = useState([
-        {
-            id: '1',
-            titulo: '45455',
-            valor: 'R$ 15,00',
-            consultor: 'Dalton Marquez',
-            arquivo: 'Cadastro e pesquisa - Cadastrar - Pessoa física.jpg',
-            dataEnvio: '04/02/2026 00:54',
-            status: 'Processando'
+    const [loading, setLoading] = useState(true);
+    const [invoices, setInvoices] = useState<any[]>([]);
+
+    const fetchInvoices = async () => {
+        setLoading(true);
+        try {
+            // Fetch invoices
+            const { data: invData, error: invError } = await supabase
+                .from('invoices')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (invError) throw invError;
+
+            // Fetch users to map creator_id to name
+            const { data: usersData, error: usersError } = await supabase
+                .from('usuarios')
+                .select('id, nome_fantasia');
+
+            if (usersError) throw usersError;
+
+            const userMap: Record<string, string> = {};
+            usersData.forEach(u => {
+                userMap[u.id] = u.nome_fantasia || 'Consultor Desconhecido';
+            });
+
+            const mappedInvoices = (invData || []).map((inv: any) => ({
+                id: inv.id,
+                titulo: inv.titulo || 'Sem título',
+                valor: typeof inv.valor === 'number' ? inv.valor : parseFloat(inv.valor) || 0,
+                consultor: userMap[inv.creator_id] || 'Consultor',
+                creator_id: inv.creator_id,
+                arquivo: inv.arquivo_url ? inv.arquivo_url.split('/').pop() : 'arquivo.pdf',
+                arquivoUrl: inv.arquivo_url,
+                dataEnvio: new Date(inv.created_at).toLocaleString('pt-BR'),
+                status: inv.status_nf || 'Pendente',
+                mes_referencia: inv.mes_referencia,
+                ano_referencia: inv.ano_referencia,
+                rejectionReason: inv.motivo || '',
+                raw: inv // Keep raw data just in case
+            }));
+
+            setInvoices(mappedInvoices);
+        } catch (err: any) {
+            console.error('Erro ao buscar notas:', err.message);
+        } finally {
+            setLoading(false);
         }
-    ]);
+    };
+
+    useEffect(() => {
+        fetchInvoices();
+    }, []);
 
     const handleView = (invoice: any) => {
         setSelectedInvoice(invoice);
         setIsModalOpen(true);
     };
 
-    const handleApprove = async (data: any) => {
-        setIsSaving(true);
-        // Simulação de chamada de API
-        setTimeout(() => {
-            setMockInvoices(prev => prev.map(inv =>
-                inv.id === selectedInvoice.id
-                    ? { ...inv, status: data.status, rejectionReason: data.rejectionReason }
-                    : inv
-            ));
-            setIsSaving(false);
+    const handleConfirmPayment = async (inv: any) => {
+        if (!confirm(`Deseja confirmar o pagamento da nota de ${inv.consultor} no valor de R$ ${inv.valor.toFixed(2).replace('.', ',')}?`)) return;
+
+        try {
+            const data_pagamento = new Date().toISOString();
+            const { error } = await supabase
+                .from('invoices')
+                .update({ status_nf: 'Paga', data_pagamento })
+                .eq('id', inv.id);
+
+            if (error) throw error;
+
+            // Notify consultant
+            await supabase.from('notificacoes').insert({
+                titulo: 'Pagamento de Nota Confirmado',
+                mensagem: `Sua nota fiscal "${inv.titulo}" foi paga com sucesso no dia ${new Date().toLocaleDateString('pt-BR')}.`,
+                user_id: inv.creator_id,
+                lida: false
+            });
+
+            fetchInvoices();
+            alert('Pagamento confirmado com sucesso!');
+        } catch (err: any) {
+            alert('Erro ao confirmar pagamento: ' + err.message);
+        }
+    };
+
+    const handleApproveReject = async (result: { status: string, rejectionReason: string }) => {
+        try {
+            const updateData: any = { status_nf: result.status };
+            if (result.status === 'Rejeitada') updateData.motivo = result.rejectionReason;
+
+            const { error } = await supabase
+                .from('invoices')
+                .update(updateData)
+                .eq('id', selectedInvoice.id);
+
+            if (error) throw error;
+
+            // Notify consultant
+            const actionText = result.status === 'Aprovada' ? 'aprovada' : 'rejeitada';
+            const extra = result.status === 'Rejeitada' ? ` Motivo: ${result.rejectionReason}` : ' Aguarde o pagamento.';
+            await supabase.from('notificacoes').insert({
+                titulo: `Nota Fiscal ${result.status}`,
+                mensagem: `Sua nota fiscal "${selectedInvoice.titulo}" foi ${actionText} pelo financeiro.${extra}`,
+                user_id: selectedInvoice.creator_id,
+                lida: false
+            });
+
+            fetchInvoices();
             setIsModalOpen(false);
-        }, 1000);
+        } catch (err: any) {
+            alert('Erro ao atualizar status: ' + err.message);
+        }
+    };
+
+    const filteredInvoices = invoices.filter(inv =>
+        inv.consultor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        inv.titulo.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const formatCurrency = (val: number) => {
+        return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    };
+
+    const StatusBadge = ({ status }: { status: string }) => {
+        const styles: Record<string, string> = {
+            'Aprovada': 'bg-[#E6FBF1] text-[#27C27B] border-[#27C27B]/10',
+            'Paga': 'bg-[#E6FBF1] text-[#27C27B] border-[#27C27B]/10',
+            'Rejeitada': 'bg-[#FFF5F2] text-[#FF7A59] border-[#FF7A59]/10',
+            'Em análise': 'bg-blue-50 text-blue-500 border-blue-100',
+            'Pendente': 'bg-slate-50 text-slate-400 border-slate-200'
+        };
+        return (
+            <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${styles[status] || styles['Pendente']}`}>
+                {status || 'Pendente'}
+            </span>
+        );
     };
 
     return (
@@ -45,14 +159,14 @@ const InvoicesList: React.FC = () => {
             {/* Search Header */}
             <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <h2 className="text-sm font-bold text-[#002B49] uppercase tracking-wider">
-                    Histórico de notas fiscais
+                    Análise Faturamento de Consultores
                 </h2>
 
                 <div className="relative w-full md:w-80">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                     <input
                         type="text"
-                        placeholder="Pesquisar por nome"
+                        placeholder="Pesquisar por consultor ou nota"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full pl-11 pr-4 py-2.5 bg-[#F8FAFB] border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1] transition-all"
@@ -66,72 +180,84 @@ const InvoicesList: React.FC = () => {
                     <thead>
                         <tr className="bg-[#F8FAFB]/50">
                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                <div className="flex items-center gap-2 cursor-pointer hover:text-[#00A3B1] transition-colors">
-                                    Titulo <ChevronDown size={14} />
-                                </div>
+                                Lote / Referência
                             </th>
                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                <div className="flex items-center gap-2">
-                                    Valor
-                                </div>
+                                Valor
                             </th>
                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                <div className="flex items-center gap-2">
-                                    Consultor
-                                </div>
+                                Consultor
                             </th>
                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                <div className="flex items-center gap-2 cursor-pointer hover:text-[#00A3B1] transition-colors">
-                                    Arquivo <ChevronDown size={14} />
-                                </div>
+                                Data Env.
                             </th>
                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                <div className="flex items-center gap-2 cursor-pointer hover:text-[#00A3B1] transition-colors">
-                                    Data de envio <ChevronDown size={14} />
-                                </div>
+                                Status
                             </th>
-                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100">
-                                <div className="flex items-center gap-2 cursor-pointer hover:text-[#00A3B1] transition-colors">
-                                    Status <ChevronDown size={14} />
-                                </div>
+                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 text-right">
+                                Ações
                             </th>
-                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        {mockInvoices.map((invoice) => (
+                        {loading && (
+                            <tr><td colSpan={6} className="text-center py-10 text-slate-400">Carregando faturas...</td></tr>
+                        )}
+                        {!loading && filteredInvoices.map((invoice) => (
                             <tr key={invoice.id} className="hover:bg-slate-50/50 transition-colors group">
-                                <td className="px-6 py-5 text-sm font-medium text-slate-600 border-b border-slate-50">
-                                    {invoice.titulo}
+                                <td className="px-6 py-5 border-b border-slate-50">
+                                    <div className="text-sm font-bold text-[#002B49]">{invoice.titulo}</div>
+                                    {invoice.mes_referencia && invoice.ano_referencia && (
+                                        <div className="text-[10px] text-[#00A3B1] font-bold uppercase tracking-wider mt-1">
+                                            Ref: {MONTHS[invoice.mes_referencia - 1]} {invoice.ano_referencia}
+                                        </div>
+                                    )}
                                 </td>
-                                <td className="px-6 py-5 text-sm font-medium text-slate-600 border-b border-slate-50">
-                                    {invoice.valor}
+                                <td className="px-6 py-5 text-sm font-bold text-[#002B49] border-b border-slate-50">
+                                    {formatCurrency(invoice.valor)}
                                 </td>
                                 <td className="px-6 py-5 text-sm font-medium text-slate-600 border-b border-slate-50">
                                     {invoice.consultor}
                                 </td>
-                                <td className="px-6 py-5 text-sm font-medium text-slate-400 border-b border-slate-50 max-w-xs truncate">
-                                    {invoice.arquivo}
-                                </td>
-                                <td className="px-6 py-5 text-sm font-medium text-slate-600 border-b border-slate-50">
+                                <td className="px-6 py-5 text-xs font-medium text-slate-400 border-b border-slate-50">
                                     {invoice.dataEnvio}
                                 </td>
                                 <td className="px-6 py-5 border-b border-slate-50">
-                                    <span className={`px-3 py-1 text-xs font-bold rounded-lg border transition-all duration-300
-                                        ${invoice.status === 'Aprovada' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                            invoice.status === 'Rejeitada' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                                                'bg-orange-50 text-orange-600 border-orange-100'}`}>
-                                        {invoice.status}
-                                    </span>
+                                    <StatusBadge status={invoice.status} />
                                 </td>
                                 <td className="px-6 py-5 border-b border-slate-50 text-right">
-                                    <div className="flex items-center justify-end gap-2 overflow-hidden">
+                                    <div className="flex items-center justify-end gap-2">
                                         <button
-                                            onClick={() => handleView(invoice)}
-                                            className="p-2 bg-slate-100 text-slate-400 rounded-lg hover:bg-[#002B49] hover:text-white transition-all active:scale-95 shadow-sm"
+                                            onClick={() => window.open(invoice.arquivoUrl, '_blank')}
+                                            className="p-2 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 hover:text-slate-700 transition-all shadow-sm"
+                                            title="Ver PDF"
                                         >
                                             <Eye size={16} />
                                         </button>
+
+                                        {['Pendente', 'Em análise'].includes(invoice.status) && (
+                                            <button
+                                                onClick={() => handleView(invoice)}
+                                                className="px-3 py-1.5 bg-[#00A3B1] text-white rounded-lg hover:bg-[#008c99] transition-all text-xs font-bold shadow-md shadow-[#00A3B1]/20"
+                                            >
+                                                Analisar
+                                            </button>
+                                        )}
+
+                                        {invoice.status === 'Aprovada' && (
+                                            <button
+                                                onClick={() => handleConfirmPayment(invoice)}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 bg-[#002B49] text-white rounded-lg hover:bg-[#001D32] transition-all text-xs font-bold shadow-md"
+                                                title="Marcar como Paga"
+                                            >
+                                                <CreditCard size={14} /> Confirmar Pagto
+                                            </button>
+                                        )}
+                                        {invoice.status === 'Paga' && (
+                                            <span className="flex items-center gap-1.5 px-3 py-1.5 text-[#27C27B] text-xs font-bold">
+                                                <CheckCircle size={14} /> Paga
+                                            </span>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -140,9 +266,8 @@ const InvoicesList: React.FC = () => {
                 </table>
             </div>
 
-            {/* Empty state placeholder if needed */}
-            {mockInvoices.length === 0 && (
-                <div className="p-20 text-center text-slate-400 italic">
+            {!loading && filteredInvoices.length === 0 && (
+                <div className="p-20 text-center text-slate-400 font-medium">
                     Nenhuma nota fiscal encontrada.
                 </div>
             )}
@@ -151,8 +276,7 @@ const InvoicesList: React.FC = () => {
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 invoice={selectedInvoice}
-                onApprove={handleApprove}
-                loading={isSaving}
+                onApprove={handleApproveReject}
             />
         </div>
     );

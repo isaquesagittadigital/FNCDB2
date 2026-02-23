@@ -11,7 +11,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import AdminDashboard from './dashboard/AdminDashboard';
-import Simulator from './simulator/Simulator';
+import SimulatorRedirectView from '../simulator/SimulatorRedirectView';
 import UsersView from './users/UsersView';
 import ConsultantsView from './consultants/ConsultantsView';
 import ContractsView from './contracts/ContractsView';
@@ -150,7 +150,7 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
             case 'dashboard':
                 return <AdminDashboard onViewAllContracts={() => handleTabChange('contracts')} />;
             case 'simulation':
-                return <Simulator onOpen={onOpenSimulator} />;
+                return <SimulatorRedirectView />;
             case 'approval':
                 if (selectedProcessId) {
                     const process = processes.find(p => p.id === selectedProcessId);
@@ -178,7 +178,7 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
             case 'consultants':
                 return <ConsultantsView />;
             case 'contracts':
-                return <ContractsView />;
+                return <ContractsView userProfile={userProfile} />;
             case 'invoices':
                 return <InvoicesView />;
             case 'income_reports':

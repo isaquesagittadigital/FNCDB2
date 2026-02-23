@@ -44,15 +44,6 @@ const AppInner: React.FC = () => {
     });
 
     const restoreSession = async () => {
-      // Check if URL has special view (for new tab support)
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('view') === 'simulator') {
-        navigate('/simulador', { replace: true });
-        setShowSplash(false);
-        setIsReady(true);
-        return;
-      }
-
       try {
         const sessionStr = localStorage.getItem('session');
         const profileStr = localStorage.getItem('profile');
@@ -86,6 +77,19 @@ const AppInner: React.FC = () => {
                 access_token: freshSession.access_token,
                 refresh_token: freshSession.refresh_token,
               }));
+
+              // Refresh profile from DB to get newly added fields (e.g., percentual_contrato)
+              const { data: dbProfile, error: dbError } = await supabase
+                .from('usuarios')
+                .select('*')
+                .eq('id', freshSession.user.id)
+                .single();
+
+              if (!dbError && dbProfile) {
+                localStorage.setItem('profile', JSON.stringify(dbProfile));
+                handleLoginSuccess(dbProfile.tipo_user, dbProfile, undefined, true);
+                return;
+              }
             }
           }
 
@@ -150,7 +154,7 @@ const AppInner: React.FC = () => {
     const prefix = rolePrefixes[mappedRole];
 
     // If restoring session and already on a valid role path, keep the current path
-    if (isRestore && location.pathname.startsWith(`/${prefix}/`)) {
+    if (isRestore && (location.pathname.startsWith(`/${prefix}/`) || location.pathname === '/simulador')) {
       // Already on a valid path, don't navigate
     } else {
       navigate(`/${prefix}/dashboard`, { replace: true });
@@ -176,7 +180,7 @@ const AppInner: React.FC = () => {
   const commonProps = {
     onLogout: handleLogout,
     userProfile: userProfile,
-    onOpenSimulator: () => window.open('?view=simulator', '_blank')
+    onOpenSimulator: () => window.open('/simulador', '_blank')
   };
 
   return (
@@ -256,13 +260,15 @@ const AppInner: React.FC = () => {
                 exit={{ opacity: 0 }}
                 className="w-full min-h-screen"
               >
-                <SimulatorView onBack={() => {
-                  if (selectedRole) {
-                    navigate(`/${rolePrefixes[selectedRole]}/dashboard`);
-                  } else {
-                    navigate('/login');
-                  }
-                }} />
+                <SimulatorView
+                  userProfile={userProfile}
+                  onBack={() => {
+                    if (selectedRole) {
+                      navigate(`/${rolePrefixes[selectedRole]}/dashboard`);
+                    } else {
+                      navigate('/login');
+                    }
+                  }} />
               </motion.div>
             }
           />

@@ -18,6 +18,7 @@ interface EditUserModalProps {
         email: string;
         tipo_user: string;
         tipo_perfil_usuario?: string;
+        os_cargo_user?: string;
     } | null;
 }
 
@@ -30,7 +31,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, onUpdate
         nome: '',
         email: '',
         tipo_perfil_usuario: '',
-        tipo_user: ''
+        tipo_user: '',
+        os_cargo_user: ''
     });
 
     useEffect(() => {
@@ -39,7 +41,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, onUpdate
                 nome: user.nome_fantasia || user.razao_social || user.nome || '',
                 email: user.email || '',
                 tipo_perfil_usuario: user.tipo_perfil_usuario || '',
-                tipo_user: user.tipo_user || ''
+                tipo_user: user.tipo_user || '',
+                os_cargo_user: user.os_cargo_user || ''
             });
         }
     }, [isOpen, user]);
@@ -52,7 +55,7 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, onUpdate
         setErrorMsg(null);
 
         try {
-            const url = `${(import.meta as any).env.VITE_API_URL}/admin/users/${user.id}`;
+            const url = `${(import.meta as any).env.VITE_API_URL || 'http://localhost:3333/api'}/admin/users/${user.id}`;
             const response = await fetch(url, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -60,7 +63,8 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, onUpdate
                     nome_fantasia: formData.nome,
                     email: formData.email,
                     tipo_perfil_usuario: formData.tipo_perfil_usuario,
-                    tipo_user: formData.tipo_user
+                    tipo_user: formData.tipo_user,
+                    os_cargo_user: formData.os_cargo_user
                 })
             });
 
@@ -158,6 +162,35 @@ const EditUserModal: React.FC<EditUserModalProps> = ({ isOpen, onClose, onUpdate
                                     <option value="Cliente">Cliente</option>
                                 </select>
                             </div>
+
+                            <AnimatePresence>
+                                {formData.tipo_user === 'Admin' && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        className="space-y-1 mt-4"
+                                    >
+                                        <label className="text-sm font-bold text-[#002B49]">Cargo (Permissões de Visibilidade - os_cargo_user)<span className="text-[#00A3B1]">*</span></label>
+                                        <div className="relative">
+                                            <select
+                                                value={formData.os_cargo_user || 'Admin'}
+                                                onChange={(e) => setFormData({ ...formData, os_cargo_user: e.target.value })}
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-[#009BB6]/20 focus:border-[#009BB6] appearance-none"
+                                                required
+                                            >
+                                                <option value="Admin">Admin</option>
+                                                <option value="Operador">Operador</option>
+                                                <option value="Super ADMIN">Super ADMIN</option>
+                                                <option value="Lider">Líder</option>
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
 
                         <div className="flex gap-3 mt-10">

@@ -21,8 +21,8 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ContractModal from '../shared/modals/ContractModal';
-
-
+import SimulatorView from '../simulator/SimulatorView';
+import ContractForm from '../admin/contracts/ContractForm';
 
 import ContractStatusBadge from '../shared/ui/ContractStatusBadge';
 import { CONTRACT_STATUSES } from '../../lib/contractStatus';
@@ -210,41 +210,48 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
     setFilterDateEnd('');
   };
 
-  // Format number as BRL currency: 1.000,00
   const formatCurrency = (value: string): string => {
-    // Remove tudo exceto dígitos
     const digits = value.replace(/\D/g, '');
     if (!digits) return '';
-    // Converte centavos para reais
     const cents = parseInt(digits, 10);
     const reais = (cents / 100).toFixed(2);
-    // Formata com separador de milhar e vírgula decimal
     const [intPart, decPart] = reais.split('.');
     const formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return `${formatted},${decPart}`;
   };
 
-  // Format decimal: permite apenas dígitos e vírgula, max 2 casas decimais
   const formatDecimal = (value: string): string => {
-    // Permite apenas dígitos e vírgula
     let clean = value.replace(/[^\d,]/g, '');
-    // Só permite uma vírgula
     const parts = clean.split(',');
     if (parts.length > 2) {
       clean = parts[0] + ',' + parts.slice(1).join('');
     }
-    // Limita a 2 casas decimais
     if (parts.length === 2 && parts[1].length > 2) {
       clean = parts[0] + ',' + parts[1].substring(0, 2);
     }
+
+    // Check consultant max limit if needed here, or handle in onChange
     return clean;
+  };
+
+  // Helper to ensure decimal fits max allowed contract percentage
+  const handleRateChange = (value: string) => {
+    const formatted = formatDecimal(value);
+    const numValue = parseFloat(formatted.replace(',', '.'));
+    const maxAllowed = userProfile?.percentual_contrato ?? 2.0;
+
+    if (!isNaN(numValue) && numValue > maxAllowed) {
+      setFormData(prev => ({ ...prev, rate: maxAllowed.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }));
+    } else {
+      setFormData(prev => ({ ...prev, rate: formatted }));
+    }
   };
 
   const handleInputChange = (field: string, value: string) => {
     if (field === 'amount') {
       setFormData(prev => ({ ...prev, [field]: formatCurrency(value) }));
     } else if (field === 'rate') {
-      setFormData(prev => ({ ...prev, [field]: formatDecimal(value) }));
+      handleRateChange(value);
     } else {
       setFormData(prev => ({ ...prev, [field]: value }));
     }
@@ -289,31 +296,28 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
     setSimulation(result);
   };
 
-  const handleCreateContract = async () => {
-    if (!simulation || !formData.clientId) return;
+  const handleCreateFromSimulator = async (data: any) => {
+    if (!data.clientId) return;
     setSubmitting(true);
 
     try {
-      const amountStr = formData.amount.replace(/[^\d,]/g, '').replace(',', '.');
-      const amount = parseFloat(amountStr);
-      const rateStr = formData.rate.replace(',', '.');
-      const rate = parseFloat(rateStr);
+      const { amount, rate, period, startDate, paymentDay, sendMethod, clientId } = data;
       const maxRate = 2.0;
       const consultantRateVal = Math.max(0, maxRate - rate);
 
       // 1. Create Contract via API
       const contractPayload = {
-        user_id: formData.clientId,
+        user_id: clientId,
         consultor_id: userProfile?.id,
         titulo: 'Câmbio',
         valor_aporte: amount,
         taxa_mensal: rate,
         taxa_consultor: consultantRateVal,
         taxa_lider: 0.10,
-        periodo_meses: parseInt(formData.period),
-        data_inicio: formData.startDate,
-        dia_pagamento: parseInt(formData.paymentDay),
-        preferencia_assinatura: formData.sendMethod,
+        periodo_meses: period,
+        data_inicio: startDate,
+        dia_pagamento: paymentDay,
+        preferencia_assinatura: sendMethod,
         status: 'Rascunho'
       };
 
@@ -330,12 +334,22 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
 
       const contractData = await contractRes.json();
 
+      // Ensure we hit the financial calculation for the exact backend calendar structure
+      const simResult = calculateContractProjection(
+        amount,
+        rate,
+        startDate,
+        period,
+        paymentDay,
+        consultantRateVal,
+        0.10 // leaderRate
+      );
+
       // 2. Create Payment Schedule via API
-      // All objects must have the same keys for PostgREST bulk insert (PGRST102)
       const paymentsToInsert = [
-        ...simulation.clientPayments.map(p => ({
+        ...simResult.clientPayments.map(p => ({
           contrato_id: contractData.id,
-          cliente_id: formData.clientId,
+          cliente_id: clientId,
           consultor_id: userProfile?.id || null,
           data: p.date,
           valor: p.amount,
@@ -344,9 +358,9 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
           comissao_consultor: false,
           comissao_consultor_lider: false
         })),
-        ...simulation.consultantCommissions.map(p => ({
+        ...simResult.consultantCommissions.map(p => ({
           contrato_id: contractData.id,
-          cliente_id: formData.clientId,
+          cliente_id: clientId,
           consultor_id: userProfile?.id || null,
           data: p.date,
           valor: p.amount,
@@ -355,9 +369,9 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
           comissao_consultor: true,
           comissao_consultor_lider: false
         })),
-        ...simulation.leaderCommissions.map(p => ({
+        ...simResult.leaderCommissions.map(p => ({
           contrato_id: contractData.id,
-          cliente_id: formData.clientId,
+          cliente_id: clientId,
           consultor_id: userProfile?.id || null,
           data: p.date,
           valor: p.amount,
@@ -637,7 +651,7 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
                     ) : filteredContracts.map((c, i) => (
                       <tr key={i} className="text-sm hover:bg-slate-50 transition-colors group">
                         <td className="px-6 py-5 font-bold text-[#002B49]">{c.id}</td>
-                        <td className="px-6 py-5 text-slate-600">{c.fullData?.usuarios?.nome_completo || '-'}</td>
+                        <td className="px-6 py-5 text-slate-600">{c.clientName || '-'}</td>
                         <td className="px-6 py-5"><ContractStatusBadge status={c.status} /></td>
                         <td className="px-6 py-5 text-[#002B49] font-bold">{c.amount}</td>
                         <td className="px-6 py-5 text-slate-500">{c.yield}</td>
@@ -687,249 +701,17 @@ const ContractsView: React.FC<ContractsViewProps> = ({ userProfile }) => {
         ) : (
           <motion.div
             key="create"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="bg-white border border-slate-100 rounded-[2rem] p-10 shadow-sm space-y-12"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            className="w-full relative z-10 p-2"
           >
-            {/* Preference Section */}
-            <div className="space-y-4">
-              <label className="text-sm font-bold text-[#002B49] tracking-wide">Preferência de envio de link de assinatura</label>
-              <div className="flex gap-4 p-1 bg-[#F8FAFB] w-fit rounded-xl border border-slate-100">
-                {['Whatsapp', 'Email', 'SMS'].map((method) => (
-                  <button
-                    key={method}
-                    onClick={() => handleInputChange('sendMethod', method)}
-                    className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${formData.sendMethod === method
-                      ? 'bg-white text-[#27C27B] shadow-sm border border-slate-100'
-                      : 'text-slate-400 hover:text-[#002B49]'
-                      }`}
-                  >
-                    {method === 'Whatsapp' && <MessageSquare size={18} />}
-                    {method === 'Email' && <Mail size={18} />}
-                    {method === 'SMS' && <Send size={18} />}
-                    {method}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Client Select */}
-            <div className="space-y-8">
-              <h3 className="text-sm font-bold text-[#002B49] uppercase tracking-wider">Informações do cliente</h3>
-              <div className="space-y-2 relative">
-                <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Cliente <span className="text-[#00A3B1]">*</span></label>
-
-                <div className="relative z-30">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Digite o nome, email ou CPF para buscar..."
-                      value={clientSearch}
-                      onChange={(e) => {
-                        setClientSearch(e.target.value);
-                        setShowClientDropdown(true);
-                        if (formData.clientId && e.target.value === '') handleInputChange('clientId', '');
-                      }}
-                      onFocus={() => setShowClientDropdown(true)}
-                      className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]"
-                    />
-                    <ChevronRight
-                      className={`absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 transition-transform ${showClientDropdown ? 'rotate-90' : 'rotate-0'}`}
-                      size={16}
-                    />
-                  </div>
-
-                  {showClientDropdown && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setShowClientDropdown(false)}
-                      />
-                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl max-h-60 overflow-y-auto z-20 divide-y divide-slate-50">
-                        {clientsLoading && <div className="p-4 text-xs text-slate-400">Carregando clientes...</div>}
-                        {!clientsLoading && clients.length === 0 && <div className="p-4 text-xs text-slate-400">Nenhum cliente disponível.</div>}
-                        {!clientsLoading && clients.length > 0 && filteredClients.length === 0 && (
-                          <div className="p-4 text-xs text-slate-400">Nenhum cliente encontrado com este termo.</div>
-                        )}
-                        {filteredClients.map(client => (
-                          <button
-                            key={client.id}
-                            onClick={() => {
-                              handleInputChange('clientId', client.id);
-                              setClientSearch(client.nome_completo || client.email);
-                              setShowClientDropdown(false);
-                            }}
-                            className="w-full text-left px-4 py-3 hover:bg-[#F8FAFB] transition-colors flex flex-col gap-0.5"
-                          >
-                            <span className="text-sm font-bold text-[#002B49]">{client.nome_completo || 'Sem nome'}</span>
-                            <span className="text-xs text-slate-400">{client.email} • {client.cpf || 'Sem CPF'}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {userClient && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="p-8 border border-[#E6F6F7] rounded-3xl bg-white grid grid-cols-1 md:grid-cols-3 gap-8 relative overflow-hidden"
-                >
-                  <div className="space-y-6">
-                    <Field label="Nome" value={userClient.nome_completo || '-'} />
-                    <Field label="CPF" value={userClient.cpf || '-'} />
-                    <Field label="Contato" value={userClient.celular || userClient.email || '-'} />
-                  </div>
-                  <div className="space-y-6">
-                    <Field label="Banco" value={userClient.banco || '-'} />
-                    <Field label="Agência" value={userClient.agencia_bancaria || '-'} />
-                    <Field label="Conta" value={userClient.conta_bancaria || '-'} />
-                  </div>
-                  {/* Warning Box */}
-                  <div className="mt-8 p-6 bg-[#FFFBEB] border border-[#FEF3C7] rounded-xl space-y-2 col-span-1 md:col-span-3">
-                    <p className="text-[11px] font-bold text-[#92400E] uppercase tracking-wider">Atenção:</p>
-                    <p className="text-[10px] text-[#B45309] font-medium leading-relaxed">Verifique se os dados do cliente estão atualizados antes de prosseguir.</p>
-                  </div>
-                </motion.div>
-              )}
-            </div>
-
-            {/* Product & Financial Section */}
-            <div className="grid grid-cols-1 gap-8">
-              <div className="space-y-2">
-                <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Produto <span className="text-[#00A3B1]">*</span></label>
-                <select className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-medium appearance-none focus:ring-2 focus:ring-[#00A3B1]/10 focus:border-[#00A3B1]">
-                  <option value="0001">0001 - Câmbio</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Aporte <span className="text-[#00A3B1]">*</span></label>
-                  <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">R$</div>
-                    <input
-                      type="text"
-                      placeholder="0,00"
-                      value={formData.amount}
-                      onChange={(e) => handleInputChange('amount', e.target.value)}
-                      className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-bold focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Rentabilidade <span className="text-[#00A3B1]">*</span></label>
-                  <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-[10px] font-medium">% a.m.</div>
-                    <input
-                      type="text"
-                      placeholder="0.0"
-                      value={formData.rate}
-                      onChange={(e) => handleInputChange('rate', e.target.value)}
-                      className="w-full pl-16 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-bold focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Data Início <span className="text-[#00A3B1]">*</span></label>
-                  <input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={(e) => handleInputChange('startDate', e.target.value)}
-                    className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-bold focus:outline-none focus:ring-2 focus:ring-[#00A3B1]/10"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[11px] font-bold text-[#002B49] uppercase tracking-wider block">Período <span className="text-[#00A3B1]">*</span></label>
-                  <select
-                    value={formData.period}
-                    onChange={(e) => handleInputChange('period', e.target.value)}
-                    className="w-full px-4 py-3.5 bg-white border border-slate-200 rounded-xl text-sm text-[#002B49] font-bold appearance-none focus:ring-2 focus:ring-[#00A3B1]/10"
-                  >
-                    <option value="6">6 meses</option>
-                    <option value="12">12 meses</option>
-                    <option value="18">18 meses</option>
-                    <option value="24">24 meses</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Simulation Results */}
-            {simulation && (
-              <>
-                {/* Summary Boxes */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  {[
-                    { label: 'Rend. Mensal', val: `R$ ${simulation.summary.monthlyDividend.toFixed(2)}`, color: 'text-[#00A3B1]' },
-                    { label: 'Dia Pagamento', val: formData.paymentDay, color: 'text-[#00A3B1]' },
-                    { label: 'Primeiro Pagto', val: format(parseISO(simulation.summary.firstPaymentDate), 'dd/MM/yyyy'), color: 'text-[#00A3B1]' },
-                    { label: 'Fim do Contrato', val: format(parseISO(simulation.summary.endDate), 'dd/MM/yyyy'), color: 'text-[#00A3B1]' },
-                  ].map((item, i) => (
-                    <div key={i} className="bg-white border border-slate-100 rounded-xl p-5 shadow-sm text-left space-y-1">
-                      <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{item.label}</p>
-                      <p className={`text-sm font-bold ${item.color}`}>{item.val}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Installments Table */}
-                <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
-                  <div className="px-6 py-4 bg-[#F8FAFB] border-b border-slate-100 flex justify-between items-center">
-                    <h4 className="text-sm font-bold text-[#002B49]">Simulação de Pagamentos (Cliente)</h4>
-                    <span className="text-xs font-bold text-slate-400">Total: R$ {simulation.summary.totalDividend.toFixed(2)}</span>
-                  </div>
-                  <table className="w-full text-left">
-                    <thead className="bg-white border-b border-slate-50">
-                      <tr className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">
-                        <th className="px-6 py-4">Data</th>
-                        <th className="px-6 py-4">Descrição</th>
-                        <th className="px-6 py-4">Tipo</th>
-                        <th className="px-6 py-4 text-right">Valor</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-50">
-                      {simulation.clientPayments.map((row, i) => (
-                        <tr key={i} className="text-sm">
-                          <td className="px-6 py-4 text-[#002B49] font-bold">{format(parseISO(row.date), 'dd/MM/yyyy')}</td>
-                          <td className="px-6 py-4 text-slate-500">{row.description}</td>
-                          <td className="px-6 py-4 text-slate-500">
-                            <span className={`px-2 py-1 rounded text-[10px] border ${row.type === 'Pro-rata' ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                              row.type === 'Capital Return' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                'bg-green-50 text-green-600 border-green-100'
-                              }`}>
-                              {row.type}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-[#002B49] font-medium text-right">R$ {row.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-
-            {/* Actions */}
-            <div className="flex justify-end gap-4 pt-4">
-              <button
-                onClick={() => setViewMode('list')}
-                className="px-10 py-4 text-slate-400 font-bold text-sm hover:text-[#002B49] transition-colors border border-slate-200 rounded-xl"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCreateContract}
-                disabled={submitting || !simulation}
-                className="flex items-center gap-2 bg-[#00A3B1] hover:bg-[#008c99] disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 py-4 rounded-xl font-bold text-sm shadow-lg shadow-[#00A3B1]/20 active:scale-95 transition-all"
-              >
-                {submitting ? 'Salvando...' : 'Enviar contrato'}
-                {!submitting && <CheckCircle2 size={18} />}
-              </button>
-            </div>
+            <ContractForm
+              contractId={null}
+              onBack={() => setViewMode('list')}
+              onSave={fetchContracts}
+              userProfile={userProfile}
+            />
           </motion.div>
         )}
       </AnimatePresence>

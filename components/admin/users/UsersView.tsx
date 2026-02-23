@@ -187,7 +187,7 @@ const UsersView = () => {
                                     {user.email}
                                 </div>
                                 <div className="col-span-2 flex justify-center">
-                                    {getRoleBadge(user.tipo_perfil_usuario || user.tipo_user)}
+                                    {getRoleBadge(user.os_cargo_user || user.tipo_perfil_usuario || user.tipo_user)}
                                 </div>
                                 <div className="col-span-2 flex items-center justify-end gap-2 pr-2">
                                     <button

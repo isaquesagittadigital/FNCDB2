@@ -491,6 +491,7 @@ export async function adminRoutes(server: FastifyInstance) {
                     email: body.email,
                     nome_fantasia: body.nome_fantasia,
                     tipo_user: body.tipo_user,
+                    os_cargo_user: body.os_cargo_user || body.tipo_user,
                     status_cliente: 'Ativo'
                 })
                 .select()
@@ -602,6 +603,20 @@ export async function adminRoutes(server: FastifyInstance) {
         }
     });
 
+    // Helper to check if a string of digits contains any sequences of 3
+    const hasSequentialDigits = (str: string): boolean => {
+        for (let i = 0; i < str.length - 2; i++) {
+            const a = parseInt(str[i]);
+            const b = parseInt(str[i + 1]);
+            const c = parseInt(str[i + 2]);
+            // Check ascending (123, 456)
+            if (a + 1 === b && b + 1 === c) return true;
+            // Check descending (321, 654)
+            if (a - 1 === b && b - 1 === c) return true;
+        }
+        return false;
+    };
+
     server.post('/contracts', async (request: any, reply) => {
         const body = request.body;
         try {
@@ -611,18 +626,52 @@ export async function adminRoutes(server: FastifyInstance) {
 
             // Generate a unique 6-digit numeric code
             let codigo: string;
+            let codigo_externo: string;
             let isUnique = false;
+
             do {
                 codigo = String(Math.floor(100000 + Math.random() * 900000));
+                codigo_externo = String(Math.floor(100000 + Math.random() * 900000));
+
+                if (hasSequentialDigits(codigo) || hasSequentialDigits(codigo_externo)) {
+                    continue; // Skip and regenerate if they have sequence
+                }
+
                 const { data: existing } = await supabase
                     .from('contratos')
                     .select('id')
-                    .eq('codigo', codigo)
+                    .or(`codigo.eq.${codigo},codigo_externo.eq.${codigo_externo}`)
                     .maybeSingle();
+
                 isUnique = !existing;
             } while (!isUnique);
 
             body.codigo = codigo;
+            body.codigo_externo = codigo_externo;
+
+            // Audit fields
+            const now = new Date();
+            // Data in YYYY-MM-DD
+            body.data_criacao = now.toISOString().split('T')[0];
+            // Time in HH:MM:SS
+            body.hora_criacao = now.toISOString().split('T')[1].substring(0, 8);
+
+            // Try to get IP from x-forwarded-for or fallback to req.socket
+            const ip = request.headers['x-forwarded-for'] || request.socket.remoteAddress || 'unknown';
+            body.ip_criacao = typeof ip === 'string' ? ip.split(',')[0].trim() : ip[0];
+
+            // If a token was provided in the headers, try to get the user ID
+            const authHeader = request.headers.authorization;
+            if (authHeader) {
+                const token = authHeader.replace('Bearer ', '');
+                const { data: { user } } = await supabase.auth.getUser(token);
+                if (user) {
+                    body.usuario_criacao = user.id;
+                }
+            }
+
+            // Apply fixed rule for consultor lider
+            body.percentual_consultor_lider = 0.10;
 
             // Map frontend fields to DB columns if they mismatch, or just pass body
             const { data, error } = await supabase
@@ -850,11 +899,11 @@ export async function adminRoutes(server: FastifyInstance) {
 
             const data = (await res.json()) as any[];
 
-            // For client role, only show payments from Vigente contracts
-            if (cliente_id) {
-                // Fetch vigente contract IDs for this client
+            // Only show payments from Vigente contracts for clients and consultants
+            if (cliente_id || consultor_id) {
+                const queryParam = cliente_id ? `user_id=eq.${cliente_id}` : `consultor_id=eq.${consultor_id}`;
                 const contratosRes = await fetch(
-                    `${supabaseUrl}/rest/v1/contratos?select=id&user_id=eq.${cliente_id}&status=eq.Vigente`,
+                    `${supabaseUrl}/rest/v1/contratos?select=id&${queryParam}&status=eq.Vigente`,
                     {
                         headers: {
                             'apikey': serviceKey!,
@@ -967,7 +1016,7 @@ export async function adminRoutes(server: FastifyInstance) {
     // Generic User Update (Name, Email, Profile Type)
     server.put('/users/:id', async (request: any, reply) => {
         const { id } = request.params;
-        const { nome_fantasia, email, tipo_perfil_usuario, tipo_user } = request.body;
+        const { nome_fantasia, email, tipo_perfil_usuario, tipo_user, os_cargo_user } = request.body;
 
         try {
             // 1. Update Auth Email if changed
@@ -987,6 +1036,7 @@ export async function adminRoutes(server: FastifyInstance) {
             if (email !== undefined) updateData.email = email;
             if (tipo_perfil_usuario !== undefined) updateData.tipo_perfil_usuario = tipo_perfil_usuario;
             if (tipo_user !== undefined) updateData.tipo_user = tipo_user;
+            if (os_cargo_user !== undefined) updateData.os_cargo_user = os_cargo_user;
 
             const { data, error: profileError } = await supabase
                 .from('usuarios')
@@ -1818,6 +1868,164 @@ export async function adminRoutes(server: FastifyInstance) {
                     .single();
 
                 if (error) throw error;
+
+                // --- Generate Transactions & Commissions upon Approval ---
+                if (data) {
+                    const startDt = new Date(data.data_inicio);
+                    const isCapital = data.titulo === '0003 - Fundo Exclusivo';
+                    const rentabilidade = parseFloat(data.taxa_mensal) || 0;
+                    const amount = parseFloat(data.valor_aporte) || 0;
+                    const period = parseInt(data.periodo_meses) || 12;
+                    let consultorIdToPay = data.consultor_id;
+                    let consultorGlobalTax = 0;
+
+                    // Fetch consultant's global tax percent if there is a consultant
+                    if (consultorIdToPay) {
+                        const { data: cUser } = await supabase
+                            .from('usuarios')
+                            .select('percentual_contrato')
+                            .eq('id', consultorIdToPay)
+                            .single();
+                        if (cUser) {
+                            consultorGlobalTax = parseFloat(cUser.percentual_contrato) || 5.0; // fallback to 5.0 if not set
+                        }
+                    }
+
+                    // Consultant's share = Global Tax - Contract Tax
+                    const consultorTaxaAplicada = Math.max(0, consultorGlobalTax - rentabilidade);
+
+                    // Calculations
+                    let transactionsToInsert: any[] = [];
+                    let commissionsToInsert: any[] = [];
+
+                    if (isCapital) {
+                        // 0003 - Fundo Exclusivo: One payment at the end
+                        const endDt = new Date(startDt);
+                        endDt.setMonth(endDt.getMonth() + period);
+                        const endDtStr = endDt.toISOString().split('T')[0];
+
+                        const totalFactor = Math.pow(1 + rentabilidade / 100, period);
+                        const finalAmount = amount * totalFactor;
+
+                        transactionsToInsert.push({
+                            contrato_id: data.id,
+                            user_id: data.user_id,
+                            status: 'Pendente',
+                            tipo: 'Valor do aporte',
+                            valor: finalAmount,
+                            data_vencimento: endDtStr
+                        });
+
+                        // Commission at the end based on calculated tax
+                        if (consultorIdToPay && consultorTaxaAplicada > 0) {
+                            const commFactor = Math.pow(1 + consultorTaxaAplicada / 100, period);
+                            const commAmount = (amount * commFactor) - amount; // Total yield for the consultant part
+                            if (commAmount > 0) {
+                                commissionsToInsert.push({
+                                    contrato_id: data.id,
+                                    consultor_id: consultorIdToPay,
+                                    valor: commAmount,
+                                    data_pagamento: endDtStr,
+                                    status: 'Pendente',
+                                    tipo_valor: 'Porcentagem'
+                                });
+                            }
+                        }
+                    } else {
+                        // For 0001 - Câmbio and 0002 - Crédito Privado
+                        // Pro-rata first month
+                        let d = new Date(startDt);
+                        const firstMonthTarget = new Date(d.getFullYear(), d.getMonth() + 1, 10);
+                        let firstMonthDays = Math.max(0, Math.floor((firstMonthTarget.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)));
+
+                        let firstMonthPaymentDate = new Date(firstMonthTarget);
+                        if (firstMonthDays < 30) {
+                            firstMonthDays += 30; // Shift to next month if less than 30 days
+                            firstMonthPaymentDate.setMonth(firstMonthPaymentDate.getMonth() + 1);
+                        }
+
+                        // Daily rate calculation
+                        const dailyRate = rentabilidade / 30;
+                        const firstMonthDividend = amount * (dailyRate / 100) * firstMonthDays;
+
+                        transactionsToInsert.push({
+                            contrato_id: data.id,
+                            user_id: data.user_id,
+                            status: 'Pendente',
+                            tipo: 'Pro-rata',
+                            valor: firstMonthDividend,
+                            data_vencimento: firstMonthPaymentDate.toISOString().split('T')[0]
+                        });
+
+                        // Consultant Pro-rata commission
+                        if (consultorIdToPay && consultorTaxaAplicada > 0) {
+                            const commDailyRate = consultorTaxaAplicada / 30;
+                            const firstMonthComm = amount * (commDailyRate / 100) * firstMonthDays;
+                            if (firstMonthComm > 0) {
+                                commissionsToInsert.push({
+                                    contrato_id: data.id,
+                                    consultor_id: consultorIdToPay,
+                                    valor: firstMonthComm,
+                                    data_pagamento: firstMonthPaymentDate.toISOString().split('T')[0],
+                                    status: 'Pendente',
+                                    tipo_valor: 'Porcentagem'
+                                });
+                            }
+                        }
+
+                        // Subsequent standard months
+                        const standardDividend = amount * (rentabilidade / 100);
+                        const standardComm = consultorIdToPay && consultorTaxaAplicada > 0 ? amount * (consultorTaxaAplicada / 100) : 0;
+
+                        let currentPaymentDate = new Date(firstMonthPaymentDate);
+                        for (let i = 1; i < period; i++) {
+                            currentPaymentDate.setMonth(currentPaymentDate.getMonth() + 1);
+                            const dtStr = currentPaymentDate.toISOString().split('T')[0];
+
+                            transactionsToInsert.push({
+                                contrato_id: data.id,
+                                user_id: data.user_id,
+                                status: 'Pendente',
+                                tipo: 'Dividendo',
+                                valor: standardDividend,
+                                data_vencimento: dtStr
+                            });
+
+                            if (standardComm > 0) {
+                                commissionsToInsert.push({
+                                    contrato_id: data.id,
+                                    consultor_id: consultorIdToPay,
+                                    valor: standardComm,
+                                    data_pagamento: dtStr,
+                                    status: 'Pendente',
+                                    tipo_valor: 'Porcentagem'
+                                });
+                            }
+                        }
+
+                        // Capital return on last day
+                        const finalDtStr = currentPaymentDate.toISOString().split('T')[0];
+                        transactionsToInsert.push({
+                            contrato_id: data.id,
+                            user_id: data.user_id,
+                            status: 'Pendente',
+                            tipo: 'Valor do aporte',
+                            valor: amount,
+                            data_vencimento: finalDtStr
+                        });
+                    }
+
+                    // Insert to DB
+                    if (transactionsToInsert.length > 0) {
+                        const { error: tErr } = await supabase.from('transacoes').insert(transactionsToInsert);
+                        if (tErr) console.error('[Finalize] Error inserting transacoes', tErr);
+                    }
+                    if (commissionsToInsert.length > 0) {
+                        const { error: cErr } = await supabase.from('comissoes').insert(commissionsToInsert);
+                        if (cErr) console.error('[Finalize] Error inserting comissoes', cErr);
+                    }
+                }
+                // --- End Generate Logic ---
 
                 // Send notification to client
                 if (data?.user_id) {

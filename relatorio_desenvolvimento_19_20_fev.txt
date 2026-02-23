@@ -1,0 +1,41 @@
+Relatório de Desenvolvimento: Fluxos de 19 e 20 de Fevereiro de 2026
+
+Este relatório consolida todas as tarefas, correções e implementações executadas nos dias 19 e 20 de fevereiro de 2026 no sistema FNCD Capital.
+
+--------------------------------------------------------------------------------
+19 DE FEVEREIRO
+--------------------------------------------------------------------------------
+
+1. Adição do Nome do Cliente nos Contratos:
+   - Modificou-se o componente `ContractsView.tsx` para apresentar de forma clara e direta o nome dos clientes na listagem de contratos. A solução envolveu o cruzamento (mapping) de dados através das consultas (fetch) do banco de dados na atualização do estado dos contratos.
+
+2. Resolução de Falhas de Deploy Vercel (Frontend):
+   - Avaliação de erros do tipo "Failed to fetch" na versão de produção.
+   - Foram solucionados problemas relacionados à conexão das WebSockets utilizadas no ambiente de deploy e houve correção das variáveis de ambiente na Vercel (onde `VITE_API_URL` foi devidamente configurada para apontar em direção aos servidores Railway corretos).
+
+--------------------------------------------------------------------------------
+20 DE FEVEREIRO
+--------------------------------------------------------------------------------
+
+1. Configuração e Deploy de Backend:
+   - Preparação de todo o ambiente na plataforma Railway.
+   - Configuração de variáveis de ambiente do backend Python e liberação de uma URL pública acessível para as APIs consumidas pelo sistema Frontend.
+
+2. Processo de "Dockerização" do Sistema:
+   - Configuração do ambiente para permitir a execução via Docker local.
+   - Escrita ou manutenção de arquivos pertinentes de `docker-compose.yml` a fim de encapsular e padronizar o contêiner do Frontend e da API para evitar discrepâncias em ambientes de decolagem.
+
+3. Correções Definitivas de API e WebSockets:
+   - Estabilização do funcionamento de funcionalidades voltadas ao Chat (Carregamento de profissionais, departamentos e consultas).
+   - Confirmação de acessibilidade e funcionamento sadio global das chamadas que dependem da comunicação entre o Frontend em React e o Backend.
+
+4. Mapeamento Geral do Sistema:
+   - Levantamento e documentação da estrutura base, na qual se consolidou as informações de quais endpoints, rotas, tecnologias e componentes estavam estruturados num arquivo de registro nomeado "recursos_sistema.txt".
+
+5. Refatorações no Simulador de Dividendos (Admin/Consultor):
+   - Foram detectados problemas de navegação intermitentes que deslogavam os usuários por utilizarem o método de nova aba ("?view=simulator"). Toda a estrutura foi substituída pelo método de rotas diretas, mantendo a sessão intocável na mesma página e incluindo o botão de "Voltar" (Back) no componente visual.
+   - Parametrizou-se a injeção do objeto do Utilizador. Consultores online abrem o site simulador e o campo de "Consultor" não apenas some visualmente da etapa de seleção, preenchendo o identificador respectivo nos bastidores sem a intervenção explícita ou pesquisa necessária.
+   - A matemática da projeção da tabela foi aprimorada: Quando os prazos excedem o dia comum listado de pagamento na finalização do mês, os trâmites do sistema calculam a parcela mensal de 30 dias integrais para o dia exato comumente faturado e gera mais uma última linha rateada de "Pro-Rata" em conjunto aos cálculos de estornos finais de retorno do aporte do respectivo cliente ao estourar com a verdadeira data de final de contrato (endDate).
+
+--------------------------------------------------------------------------------
+Fim do Relatório

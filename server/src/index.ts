@@ -3,10 +3,10 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import dotenv from 'dotenv';
-import path from 'path';
 import { supabase } from './lib/supabase';
 
-dotenv.config({ path: path.resolve(__dirname, '../../.env.local') });
+// Em dev local lê server/.env; no Docker as vars são injetadas pelo docker-compose
+dotenv.config();
 
 const server: FastifyInstance = Fastify({
     logger: true
