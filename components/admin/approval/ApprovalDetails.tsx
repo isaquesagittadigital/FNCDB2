@@ -81,7 +81,7 @@ const ApprovalDetails: React.FC<ApprovalDetailsProps> = ({ process, onBack, onUp
             </div>
 
             {/* Contract Summary Card */}
-            <div className="bg-slate-50 rounded-xl p-4 grid grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-100 rounded-xl p-5 grid grid-cols-4 gap-4 shadow-sm">
                 <div>
                     <p className="text-xs text-slate-400 font-medium uppercase">Código</p>
                     <p className="text-sm font-semibold text-slate-800">{process.contractCode}</p>

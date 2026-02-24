@@ -46,18 +46,18 @@ const ComplianceCheckRow: React.FC<ComplianceCheckRowProps> = ({ step, onViewDoc
     const StatusIcon = statusInfo.icon;
 
     return (
-        <div className={`p-5 rounded-xl border ${statusInfo.borderColor} bg-white transition-all shadow-sm`}>
-            <div className="flex items-center gap-4">
-                {/* Status Icon - fixed size */}
-                <div className={`flex-shrink-0 p-2.5 rounded-full ${statusInfo.bgColor} border ${statusInfo.borderColor}`}>
-                    <StatusIcon className={`w-5 h-5 ${statusInfo.color}`} />
+        <div className={`p-5 rounded-xl border ${statusInfo.borderColor} bg-white transition-all shadow-sm hover:shadow-md`}>
+            <div className="flex items-start gap-4">
+                {/* Status Icon - Fixed size and centered */}
+                <div className={`flex-shrink-0 w-12 h-12 rounded-full ${statusInfo.bgColor} border ${statusInfo.borderColor} flex items-center justify-center`}>
+                    <StatusIcon className={`w-6 h-6 ${statusInfo.color}`} />
                 </div>
 
-                {/* Content area - grows to fill */}
+                {/* Content area */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h3 className="font-semibold text-slate-800">{step.title}</h3>
-                        <span className={`text-xs px-2.5 py-0.5 rounded-full border ${statusInfo.borderColor} ${statusInfo.color} font-medium bg-white whitespace-nowrap`}>
+                    <div className="flex items-center gap-3 mb-1">
+                        <h3 className="font-bold text-[#002B49]">{step.title}</h3>
+                        <span className={`text-[10px] px-2.5 py-0.5 rounded-full border ${statusInfo.borderColor} ${statusInfo.color} font-bold uppercase tracking-wider`}>
                             {statusInfo.label}
                         </span>
                     </div>
