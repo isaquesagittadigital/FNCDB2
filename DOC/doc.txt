@@ -1,0 +1,3 @@
+🔵 Consultor	isaquephputumuju@gmail.com	alves@fncd	Consultor
+🟢 Cliente	atualzdev@gmail.com	alves@fncd	Cliente
+🔴 Admin	samuel.alves@fncd.com.br	alves@fncd	Admin

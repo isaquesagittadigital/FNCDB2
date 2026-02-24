@@ -1817,7 +1817,7 @@ export async function adminRoutes(server: FastifyInstance) {
                 ]
             });
         } catch (err: any) {
-            console.error('[Approval Process Detail] Error:', err); AtualzDev
+            console.error('[Approval Process Detail] Error:', err);
             return reply.status(500).send({ error: err.message });
         }
     });
