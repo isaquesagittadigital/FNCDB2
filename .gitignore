@@ -24,3 +24,10 @@ dist-ssr
 *.sw?
 
 .vercel
+
+temp_index_docker*.js
+backend_logs*.txt
+logs.txt
+start_log.txt
+tsc-errors*
+test_output.json
