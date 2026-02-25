@@ -1,0 +1,45 @@
+=== ANÁLISE DO AMBIENTE DE DEPLOY E CONTROLE DE VERSÃO ===
+
+1. ESTADO ATUAL DO REPOSITÓRIO GIT (LOCAL)
+Remotes configurados:
+- origin: https://github.com/sagitta-digital/fncd-capital.git (Principal)
+- second-origin: https://github.com/isaquesagittadigital/fncd-capital
+- fncdb2: https://github.com/sagitta-digital/FNCDB2.git (Refere-se ao backend)
+
+Branch atual: master
+Último commit: feat: Adiciona fluxos e views de relatorios para o consultor
+
+2. AMBIENTE VERCEL: O PROBLEMA QUE OCORREU
+Na tentativa de deploy, a Vercel CLI não estava com o ID configurado no terminal e criou um novo projeto limpo ("fncd-capital") no seu Vercel pessoal (`isaquephp`), e não sobreescreveu o ambiente existente.
+
+Para que a plataforma lance as versões de frente para o usuário, o deploy precisa sempre focar no projeto "fncd-capital-v2":
+- Nome do projeto Vercel: fncd-capital-v2
+- ID Interno do projeto Vercel: prj_BqZcD166u7Ra6ef5bdPOVkzuKLU6
+- URL em produção: https://fncd-capital-v2.vercel.app/
+
+
+=== COMO CRIAR UM FLUXO TOTALMENTE AUTOMATIZADO (CI/CD) ===
+
+A melhor forma de não depender do terminal para fazer deploy (e assim evitar erros ou deploys para o projeto errado) é automatizar o fluxo via Integração Nativa Vercel + GitHub.
+
+Passo a Passo para ativar a automação:
+
+PASSO 1: Vincular o Repositório no Painel da Vercel
+1. Acesse o painel da Vercel no navegador (https://vercel.com/dashboard).
+2. Entre nas configurações do projeto existente "fncd-capital-v2".
+3. Vá em Settings (Configurações) > Git.
+4. Na seção "Connected Git Repository", certifique-se de vincular a sua conta GitHub e conectar o repositório "sagitta-digital/fncd-capital".
+5. Defina a "Production Branch" como "master" ou "main" (no seu caso atual é "master").
+
+PASSO 2: O Novo Workflow de Trabalho Local
+A partir de agora, você não precisará mais digitar comandos `vercel` no seu computador. Seu fluxo será sempre através dos seguintes comandos básicos de Git:
+
+1. Atualizar e criar os códigos no seu ambiente local.
+2. Conferir que a versão roda ("npm run dev").
+3. Subir diretamente para o GitHub oficial:
+   $ git add .
+   $ git commit -m "feat: [descrição]"
+   $ git push origin master
+
+RESULTADO AUTOMÁTICO:
+Assim que o comando `git push preview` ou `git push origin master` terminar, a Vercel identificará automaticamente a atualização no GitHub. O servidor da Vercel irá cancelar builds velhos de imediato e lançar a nova interface (os Relatórios do Consultor novos etc.) para o Domínio Primário de produção (https://fncd-capital-v2.vercel.app/) em 1 a 2 minutos sem qualquer intervenção ou risco de criar novos links duplicados.
