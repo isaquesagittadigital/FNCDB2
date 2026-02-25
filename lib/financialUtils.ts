@@ -1,6 +1,18 @@
 
 import { addMonths, differenceInCalendarDays, format, getDate, parseISO, setDate } from 'date-fns';
 
+export const getCommercialDays = (date1: Date, date2: Date) => {
+    let d1 = date1.getDate();
+    let d2 = date2.getDate();
+    // In commercial month, 31st is treated as 30th
+    if (d1 === 31) d1 = 30;
+    if (d2 === 31) d2 = 30;
+    // For February, if it's the last day of the month, we don't automatically round to 30, unless required by strict rules, but usually treating Feb days as their actual count (up to 28/29) or clamping them is enough. Standard BR math:
+    return ((date2.getFullYear() - date1.getFullYear()) * 360) +
+        ((date2.getMonth() - date1.getMonth()) * 30) +
+        (d2 - d1);
+};
+
 export interface ContractSimulation {
     summary: {
         monthlyDividend: number;
@@ -51,8 +63,7 @@ export const calculateContractProjection = (
     let firstPaymentDate = new Date(start.getFullYear(), start.getMonth() + 1, paymentDay);
 
     // Calculate days for first parcel
-    const timeDiff = firstPaymentDate.getTime() - start.getTime();
-    const daysFirstParcel = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    const daysFirstParcel = getCommercialDays(start, firstPaymentDate);
 
     clientPayments.push({
         date: format(firstPaymentDate, 'yyyy-MM-dd'),
@@ -91,8 +102,7 @@ export const calculateContractProjection = (
             });
             totalDividend += 30 * dailyRate;
 
-            const timeDiffEnd = endDate.getTime() - paymentDayOnLastMonth.getTime();
-            const daysLastParcel = Math.ceil(timeDiffEnd / (1000 * 3600 * 24));
+            const daysLastParcel = getCommercialDays(paymentDayOnLastMonth, endDate);
 
             if (daysLastParcel > 0) {
                 clientPayments.push({
@@ -104,8 +114,7 @@ export const calculateContractProjection = (
                 totalDividend += daysLastParcel * dailyRate;
             }
         } else {
-            const timeDiffEnd = endDate.getTime() - lastPaymentDate.getTime();
-            const daysLastParcel = Math.ceil(timeDiffEnd / (1000 * 3600 * 24));
+            const daysLastParcel = getCommercialDays(lastPaymentDate, endDate);
 
             if (daysLastParcel > 0) {
                 clientPayments.push({

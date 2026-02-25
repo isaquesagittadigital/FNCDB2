@@ -182,13 +182,22 @@ const SimulatorView: React.FC<SimulatorViewProps> = ({ onBack, userProfile, mode
         const dailyRate = (Number(aporte) * (Number(rentabilidade) / 100)) / 30;
         const months = Number(periodo);
 
+        const getCommercialDays = (date1: Date, date2: Date) => {
+            let d1 = date1.getDate();
+            let d2 = date2.getDate();
+            if (d1 === 31) d1 = 30;
+            if (d2 === 31) d2 = 30;
+            return ((date2.getFullYear() - date1.getFullYear()) * 360) +
+                ((date2.getMonth() - date1.getMonth()) * 30) +
+                (d2 - d1);
+        };
+
 
         // 1. Calculate first payment date (10th of next month)
         let firstPaymentDate = new Date(start.getFullYear(), start.getMonth() + 1, diaPagamento);
 
         // Calculate days for first parcel
-        const timeDiff = firstPaymentDate.getTime() - start.getTime();
-        const daysFirstParcel = Math.ceil(timeDiff / (1000 * 3600 * 24));
+        const daysFirstParcel = getCommercialDays(start, firstPaymentDate);
 
         rows.push({
             parcela: 1,
@@ -232,8 +241,7 @@ const SimulatorView: React.FC<SimulatorViewProps> = ({ onBack, userProfile, mode
                 });
                 finalProRataStart = paymentDayOnLastMonth;
                 // And then the final proportional fragment after the 10th
-                const timeDiffEnd = endDate.getTime() - paymentDayOnLastMonth.getTime();
-                const daysLastParcel = Math.ceil(timeDiffEnd / (1000 * 3600 * 24));
+                const daysLastParcel = getCommercialDays(paymentDayOnLastMonth, endDate);
 
                 rows.push({
                     parcela: months + 1,
@@ -244,8 +252,7 @@ const SimulatorView: React.FC<SimulatorViewProps> = ({ onBack, userProfile, mode
                 });
             } else {
                 // End date is before or exactly on the 10th, so just calculate pro-rata from the previous payment date
-                const timeDiffEnd = endDate.getTime() - lastPaymentDate.getTime();
-                const daysLastParcel = Math.ceil(timeDiffEnd / (1000 * 3600 * 24));
+                const daysLastParcel = getCommercialDays(lastPaymentDate, endDate);
 
                 rows.push({
                     parcela: months,

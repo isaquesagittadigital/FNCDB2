@@ -223,7 +223,7 @@ const ContractForm: React.FC<ContractFormProps> = ({ contractId, onBack, onSave,
                 dias: p.description.includes('dias') ? parseInt(p.description.replace(/\D/g, '')) || 0 : 0,
                 valor: p.amount,
                 data: new Date(p.date + 'T12:00:00'),
-                tipo: isCapital ? 'Valor do aporte' : p.type === 'Pro-rata' ? 'Pro-rata' : 'Dividendo'
+                tipo: isCapital ? 'Valor do aporte' : 'Dividendo'
             };
         });
 
@@ -645,7 +645,7 @@ const ContractForm: React.FC<ContractFormProps> = ({ contractId, onBack, onSave,
                                     {[
                                         { label: 'Rendimento', value: 'Mensal' },
                                         { label: 'Dia de pagamento', value: String(formData.dia_pagamento) },
-                                        { label: 'Segundo pagamento', value: String(formData.segundo_pagamento) },
+                                        { label: 'Segundo pagamento', value: String(simulationData.rows[1]?.data.getDate() || formData.dia_pagamento) },
                                         { label: 'Fim do contrato', value: formatDate(new Date(simulationData.dataFim + 'T12:00:00')) }
                                     ].map((stat, idx) => (
                                         <div key={idx} className="p-5 bg-white rounded-2xl border border-slate-100 text-left">

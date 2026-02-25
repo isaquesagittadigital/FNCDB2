@@ -2019,8 +2019,17 @@ export async function adminRoutes(server: FastifyInstance) {
                         firstPaymentDate.setMonth(firstPaymentDate.getMonth() + 1);
                     }
 
-                    const diffTime = firstPaymentDate.getTime() - currentRefDate.getTime();
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    const getCommercialDays = (date1: Date, date2: Date) => {
+                        let d1 = date1.getDate();
+                        let d2 = date2.getDate();
+                        if (d1 === 31) d1 = 30;
+                        if (d2 === 31) d2 = 30;
+                        return ((date2.getFullYear() - date1.getFullYear()) * 360) +
+                            ((date2.getMonth() - date1.getMonth()) * 30) +
+                            (d2 - d1);
+                    };
+
+                    const diffDays = getCommercialDays(currentRefDate, firstPaymentDate);
                     const proRataDividend = (amount * (rentabilidade / 100) / 30) * diffDays;
 
                     calendarRecords.push({
