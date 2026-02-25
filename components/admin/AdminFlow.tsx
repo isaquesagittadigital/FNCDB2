@@ -28,6 +28,11 @@ import ClientsView from './clients/ClientsView';
 import InvoicesView from './invoices/InvoicesView';
 import SuccessModal from '../shared/ui/SuccessModal';
 import EmptyState from '../shared/ui/EmptyState';
+
+import DividendsView from './payments/DividendsView';
+import CommissionsView from './payments/CommissionsView';
+import LeaderCommissionsView from './payments/LeaderCommissionsView';
+
 import { adminMenu } from './menu';
 import { getTabFromSlug, getRoutePath } from '../../lib/routes';
 
@@ -220,13 +225,19 @@ const AdminFlow: React.FC<AdminFlowProps> = ({ onLogout, onOpenSimulator, userPr
                         />
                     </div>
                 );
+            case 'dividends':
+                return <DividendsView />;
+            case 'commissions':
+                return <CommissionsView />;
+            case 'leader_commissions':
+                return <LeaderCommissionsView />;
             case 'payments':
                 return (
                     <div className="space-y-6">
                         <h1 className="text-2xl font-bold text-[#002B49]">Pagamentos</h1>
                         <EmptyState
                             title="Módulo de Pagamentos"
-                            description="A gestão de pagamentos está em fase de desenvolvimento e será liberada em breve."
+                            description="Selecione uma das opções no menu esquerdo (Dividendos, Comissões ou Comissões de Líder) para iniciar."
                         />
                     </div>
                 );

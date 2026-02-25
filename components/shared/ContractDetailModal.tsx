@@ -820,14 +820,14 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                             {/* Comprovantes - Admin/Consultant only: with upload & manage */}
                             {canManageComprovantes && (
                                 <SectionCard
-                                    title="Comprovantes"
+                                    title="Anexar comprovantes"
                                     icon={<Paperclip size={15} />}
                                     headerRight={
                                         <button
                                             onClick={() => setShowUploadModal(true)}
-                                            className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-[#00A3B1] to-[#008c99] rounded-xl hover:from-[#008c99] hover:to-[#007a87] transition-all active:scale-95 shadow-md shadow-[#00A3B1]/15"
+                                            className="flex items-center gap-1.5 text-[#00A3B1] text-sm font-bold hover:opacity-80 transition-opacity"
                                         >
-                                            <Upload size={12} /> Upload
+                                            <Upload size={16} /> Upload
                                         </button>
                                     }
                                 >
@@ -839,20 +839,14 @@ const ContractDetailModal: React.FC<ContractDetailModalProps> = ({ contract, onC
                                             </div>
                                         </div>
                                     ) : comprovantes.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-10 bg-gradient-to-b from-slate-50/50 to-white rounded-xl border border-dashed border-slate-200">
-                                            <div className="w-14 h-14 bg-[#E6F6F7] rounded-2xl flex items-center justify-center mb-3 shadow-sm">
-                                                <Paperclip className="text-[#00A3B1]" size={22} />
+                                        <div onClick={() => setShowUploadModal(true)} className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center gap-4 bg-slate-50/50 hover:bg-slate-50 transition-colors cursor-pointer group mt-2">
+                                            <div className="w-12 h-12 bg-[#E6F6F7] rounded-full flex items-center justify-center text-[#00A3B1] group-hover:scale-110 transition-transform">
+                                                <FileText size={20} />
                                             </div>
-                                            <p className="text-sm font-bold text-[#002B49]">Nenhum comprovante anexado</p>
-                                            <p className="text-xs text-slate-400 mt-1 max-w-[280px] text-center leading-relaxed">
-                                                Anexe o comprovante de confirmação do aporte deste contrato para dar andamento.
-                                            </p>
-                                            <button
-                                                onClick={() => setShowUploadModal(true)}
-                                                className="mt-4 flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-[#00A3B1] bg-[#E6F6F7] hover:bg-[#d5eff1] rounded-xl transition-all active:scale-95"
-                                            >
-                                                <Upload size={13} /> Anexar comprovante
-                                            </button>
+                                            <div>
+                                                <p className="text-sm font-bold text-[#002B49]">Nenhum comprovante anexado.</p>
+                                                <p className="text-xs text-slate-400 mt-1">Anexar comprovante de confirmação do aporte deste contato</p>
+                                            </div>
                                         </div>
                                     ) : (
                                         <div className="space-y-2">

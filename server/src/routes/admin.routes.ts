@@ -885,7 +885,7 @@ export async function adminRoutes(server: FastifyInstance) {
     // Calendar Payments (GET - Fetch)
     server.get('/calendar-payments', async (request: any, reply) => {
         try {
-            const { consultor_id, cliente_id, contrato_id, month, year } = request.query;
+            const { consultor_id, cliente_id, contrato_id, month, year, type } = request.query;
             const supabaseUrl = process.env.SUPABASE_URL;
             const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -902,6 +902,14 @@ export async function adminRoutes(server: FastifyInstance) {
             }
             if (cliente_id) {
                 params.append('cliente_id', `eq.${cliente_id}`);
+            }
+            // Check for specific type (dividendos, comissoes, comissoes_lider)
+            if (type === 'dividendos') {
+                params.append('dividendos_clientes', 'eq.true');
+            } else if (type === 'comissoes') {
+                params.append('comissao_consultor', 'eq.true');
+            } else if (type === 'comissoes_lider') {
+                params.append('comissao_consultor_lider', 'eq.true');
             }
             // Filter by month/year if provided
             if (month && year) {
@@ -957,6 +965,39 @@ export async function adminRoutes(server: FastifyInstance) {
 
             return reply.send(data);
 
+        } catch (err: any) {
+            server.log.error(err);
+            return reply.status(500).send({ error: err.message });
+        }
+    });
+
+    // Calendar Payments (PATCH - Mark as paid)
+    server.patch('/calendar-payments/:id/pay', async (request: any, reply) => {
+        const { id } = request.params;
+        try {
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+            const res = await fetch(
+                `${supabaseUrl}/rest/v1/calendario%2Fpagamentos?id=eq.${id}`,
+                {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': serviceKey!,
+                        'Authorization': `Bearer ${serviceKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({ pago: true })
+                }
+            );
+
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(`Supabase error: ${errText}`);
+            }
+
+            return reply.send({ success: true, message: 'Status do pagamento atualizado com sucesso.' });
         } catch (err: any) {
             server.log.error(err);
             return reply.status(500).send({ error: err.message });

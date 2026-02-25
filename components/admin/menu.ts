@@ -57,7 +57,12 @@ export const adminMenu: SidebarItem[] = [
         id: 'payments',
         label: 'Pagamentos',
         icon: CreditCard,
-        permissionModule: 'gerenciar_pagamentos'
+        permissionModule: 'gerenciar_pagamentos',
+        subItems: [
+            { id: 'dividends', label: 'Dividendos', icon: CreditCard },
+            { id: 'commissions', label: 'Comissões', icon: CreditCard },
+            { id: 'leader_commissions', label: 'Comissões do Líder', icon: CreditCard }
+        ]
     },
     {
         id: 'simulation',
