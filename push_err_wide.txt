@@ -1,0 +1,65 @@
+﻿git : remote: error: GH013: Repository rule 
+violations found for refs/heads/master.       
+ 
+At line:1 char:140
++ ... tion.Host.Size(3000, 50); git push 
+fncdb2 master --force 2>&1 | Out-F ...
++                               
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( 
+   remote: error: ...master.        :String)  
+   [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandEr 
+   ror
+ 
+remote: 
+remote: - GITHUB PUSH PROTECTION        
+remote:   ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇö
+ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓ
+ÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇö     
+   
+remote:     Resolve the following violations 
+before pushing again        
+remote: 
+remote:     - Push cannot contain secrets     
+   
+remote: 
+remote:             
+remote:      (?) Learn how to resolve a 
+blocked push        
+remote:      https://docs.github.com/code-secu
+rity/secret-scanning/working-with-secret-scann
+ing-and-push-protection/working-with-push-prot
+ection-from-the-command-line#resolving-a-block
+ed-push        
+remote:             
+remote:             
+remote:       ΓÇöΓÇö Sendinblue API Key ΓÇöΓÇö
+ΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓ
+ÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇöΓÇö  
+      
+remote:        locations:        
+remote:          - commit: 
+27978a55ee62ef25e4c002c7bf59f382bd0c2b6e      
+  
+remote:            path: .env:9        
+remote:          - commit: 
+27978a55ee62ef25e4c002c7bf59f382bd0c2b6e      
+  
+remote:            path: .env.sao:9        
+remote:             
+remote:        (?) To push, remove secret 
+from commit(s) or follow this URL to allow 
+the secret.        
+remote:        https://github.com/isaquesagitt
+adigital/FNCDB2/security/secret-scanning/unblo
+ck-secret/3A7qO6ruzPVTMfX7tWEtq6220FB        
+remote:             
+remote: 
+remote: 
+To https://github.com/isaquesagittadigital/FNC
+DB2.git
+ ! [remote rejected] master -> master (push 
+declined due to repository rule violations)
+error: failed to push some refs to 'https://gi
+thub.com/isaquesagittadigital/FNCDB2.git'

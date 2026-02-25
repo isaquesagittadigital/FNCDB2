@@ -31,3 +31,4 @@ logs.txt
 start_log.txt
 tsc-errors*
 test_output.json
+.env*.local

@@ -21,12 +21,16 @@ import ApprovalsView from './ApprovalsView';
 import ClientsView from './ClientsView';
 import ContractsView from './ContractsView';
 import InvoicesView from './InvoicesView';
+import YieldsView from './YieldsView';
 import SimulatorRedirectView from '../simulator/SimulatorRedirectView';
 
 import CalendarView from '../shared/CalendarView';
 import NotificationsView from '../shared/NotificationsView';
 import DocumentsView from '../shared/DocumentsView';
 import ProfileView from './ConsultantProfileView';
+import ReportsDetailedView from './reports/ReportsDetailedView';
+import ReportsPortfoliosView from './reports/ReportsPortfoliosView';
+import ReportsCommissionView from './reports/ReportsCommissionView';
 
 import { consultantMenu } from './menu';
 import { getTabFromSlug, getRoutePath } from '../../lib/routes';
@@ -60,6 +64,10 @@ const ConsultantFlow: React.FC<ConsultantFlowProps> = ({ onLogout, userProfile, 
             case 'clients': return <ClientsView userProfile={userProfile} />;
             case 'contracts': return <ContractsView userProfile={userProfile} />;
             case 'invoice': return <InvoicesView userProfile={userProfile} />;
+            case 'yields': return <YieldsView userProfile={userProfile} />;
+            case 'reports_detailed': return <ReportsDetailedView />;
+            case 'reports_portfolios': return <ReportsPortfoliosView />;
+            case 'reports_commission': return <ReportsCommissionView />;
             case 'calendar': return <CalendarView role="consultant" userId={userProfile?.id} />;
             case 'notifications': return <NotificationsView />;
             case 'profile': return <ProfileView />;
