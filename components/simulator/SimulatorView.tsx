@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Calculator, Calendar, User, DollarSign, Percent, Clock, ChevronRight, Download, Printer, ArrowLeft, MessageSquare, Mail, Send } from 'lucide-react';
 import { LogoFull } from '../shared/ui/Logo';
 import { supabase } from '../../lib/supabase';
+import { calculateContractProjection } from '../../lib/financialUtils';
 
 interface SimulationRow {
     parcela: number;
@@ -123,7 +124,7 @@ const SimulatorView: React.FC<SimulatorViewProps> = ({ onBack, userProfile, mode
             if (mode !== 'create') return;
             setIsLoadingClientes(true);
             try {
-                const response = await fetch(`${import.meta.env.VITE_API_URL}/admin/clients?limit=500`);
+                const response = await fetch(`${(import.meta as any).env.VITE_API_URL}/admin/clients?limit=500`);
                 if (!response.ok) throw new Error('Falha ao buscar clientes');
                 const { data } = await response.json();
 
@@ -177,107 +178,62 @@ const SimulatorView: React.FC<SimulatorViewProps> = ({ onBack, userProfile, mode
             return { rows: [], totalDividendos: 0, endDate: new Date() };
         }
 
-        const rows: SimulationRow[] = [];
-        const start = new Date(dataAporte + 'T00:00:00');
-        const dailyRate = (Number(aporte) * (Number(rentabilidade) / 100)) / 30;
-        const months = Number(periodo);
+        const numericAmount = Number(aporte);
+        const numericRate = Number(rentabilidade);
+        const numericPeriod = Number(periodo);
 
-        const getCommercialDays = (date1: Date, date2: Date) => {
-            let d1 = date1.getDate();
-            let d2 = date2.getDate();
-            if (d1 === 31) d1 = 30;
-            if (d2 === 31) d2 = 30;
-            return ((date2.getFullYear() - date1.getFullYear()) * 360) +
-                ((date2.getMonth() - date1.getMonth()) * 30) +
-                (d2 - d1);
-        };
+        // Standardize the timezone handling
+        const dateStr = dataAporte;
 
+        let simResult;
+        try {
+            simResult = calculateContractProjection(
+                numericAmount,
+                numericRate,
+                dateStr,
+                numericPeriod,
+                diaPagamento,
+                0, // No consultant rate needed for client simulation display
+                0  // No leader rate needed for client simulation display
+            );
+        } catch (error) {
+            console.error(error);
+            return { rows: [], totalDividendos: 0, endDate: new Date() };
+        }
 
-        // 1. Calculate first payment date (10th of next month)
-        let firstPaymentDate = new Date(start.getFullYear(), start.getMonth() + 1, diaPagamento);
+        // Map backend installments to frontend rows
+        // Client Payments contains exactly what we need
+        const mappedRows: SimulationRow[] = simResult.clientPayments.map((p, idx) => {
+            // Determine parsing for "parcela". 
+            // In the old code: 1, 2, 3... and 0 for Capital Return
+            let parcela = idx + 1;
+            if (p.type === 'Capital Return') parcela = 0;
+            // Or if there's a final pro-rata after 6 chunks, we can just use the index.
 
-        // Calculate days for first parcel
-        const daysFirstParcel = getCommercialDays(start, firstPaymentDate);
+            // Format dates from YYYY-MM-DD to DD/MM/YYYY
+            const formattedDate = p.date.split('-').reverse().join('/');
 
-        rows.push({
-            parcela: 1,
-            diasProRata: daysFirstParcel,
-            valorDividendo: daysFirstParcel * dailyRate,
-            dataPagamento: formatDate(firstPaymentDate),
-            tipo: 'Dividendo'
+            let tipoStr = 'Dividendo';
+            if (p.type === 'Capital Return') tipoStr = 'Valor do aporte';
+
+            return {
+                parcela: parcela,
+                diasProRata: p.diasProRata || 0,
+                valorDividendo: p.amount,
+                dataPagamento: formattedDate,
+                tipo: tipoStr
+            };
         });
 
-        // 2. Middle parcels (Full months)
-        let lastPaymentDate = firstPaymentDate;
-        for (let i = 2; i < months; i++) {
-            const nextPayment = new Date(lastPaymentDate.getFullYear(), lastPaymentDate.getMonth() + 1, diaPagamento);
-            rows.push({
-                parcela: i,
-                diasProRata: 0,
-                valorDividendo: 30 * dailyRate,
-                dataPagamento: formatDate(nextPayment),
-                tipo: 'Dividendo'
-            });
-            lastPaymentDate = nextPayment;
-        }
+        // Backend endDate is YYYY-MM-DD
+        const [year, month, day] = simResult.summary.endDate.split('-');
+        const endDateObject = new Date(Number(year), Number(month) - 1, Number(day));
 
-        // 3. Last parcel calculations
-        if (months > 1) {
-            const endDate = new Date(start.getFullYear(), start.getMonth() + months, start.getDate());
-
-            // Check if we need a regular payment on the 10th of the final month
-            const paymentDayOnLastMonth = new Date(endDate.getFullYear(), endDate.getMonth(), diaPagamento);
-            let finalProRataStart = lastPaymentDate;
-
-            // If the endDate is after the 10th, and the 10th is after the last payment date
-            if (endDate.getDate() > diaPagamento && paymentDayOnLastMonth > lastPaymentDate) {
-                // Add regular full-month payment for the 10th of the last month
-                rows.push({
-                    parcela: months,
-                    diasProRata: 0,
-                    valorDividendo: 30 * dailyRate,
-                    dataPagamento: formatDate(paymentDayOnLastMonth),
-                    tipo: 'Dividendo'
-                });
-                finalProRataStart = paymentDayOnLastMonth;
-                // And then the final proportional fragment after the 10th
-                const daysLastParcel = getCommercialDays(paymentDayOnLastMonth, endDate);
-
-                rows.push({
-                    parcela: months + 1,
-                    diasProRata: daysLastParcel,
-                    valorDividendo: daysLastParcel * dailyRate,
-                    dataPagamento: formatDate(endDate),
-                    tipo: 'Dividendo'
-                });
-            } else {
-                // End date is before or exactly on the 10th, so just calculate pro-rata from the previous payment date
-                const daysLastParcel = getCommercialDays(lastPaymentDate, endDate);
-
-                rows.push({
-                    parcela: months,
-                    diasProRata: daysLastParcel,
-                    valorDividendo: daysLastParcel * dailyRate,
-                    dataPagamento: formatDate(endDate),
-                    tipo: 'Dividendo'
-                });
-            }
-
-            // 4. Return of capital
-            rows.push({
-                parcela: 0,
-                diasProRata: 0,
-                valorDividendo: Number(aporte),
-                dataPagamento: formatDate(endDate),
-                tipo: 'Valor do aporte'
-            });
-        }
-
-        const totalDividendos = rows
-            .filter(r => r.tipo === 'Dividendo')
-            .reduce((sum, r) => sum + r.valorDividendo, 0);
-
-        return { rows, totalDividendos, endDate: new Date(start.getFullYear(), start.getMonth() + months, start.getDate()) };
+        return {
+            rows: mappedRows,
+            totalDividendos: simResult.summary.totalDividend,
+            endDate: endDateObject
+        };
     }, [dataAporte, aporte, rentabilidade, periodo, diaPagamento]);
 
 
